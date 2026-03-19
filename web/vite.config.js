@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  // GitHub Pages 用子路徑時，建議用相對路徑，避免白畫面（資源找不到）
+  base: './',
   plugins: [
     react(),
     VitePWA({
@@ -11,7 +13,7 @@ export default defineConfig({
       manifest: {
         name: 'Coffee',
         short_name: 'Coffee',
-        start_url: '/',
+        start_url: '.',
         display: 'standalone',
         theme_color: '#6b3828',
         background_color: '#ffffff',
