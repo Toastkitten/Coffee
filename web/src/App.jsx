@@ -555,15 +555,15 @@ function TimeWaterChart({ points: pointsProp, totalWater, maxTime: maxTimeProp }
       {/* 座標軸線 */}
       <line x1={pad.l} x2={w - pad.r} y1={h - pad.b} y2={h - pad.b} stroke="#a3a3a3" strokeWidth="0.75" />
       <line x1={pad.l} x2={pad.l} y1={pad.t} y2={h - pad.b} stroke="#a3a3a3" strokeWidth="0.75" />
-      {/* 軸單位（橫軸→右上、縱軸→左上） */}
-      <text x={w - pad.r} y={pad.t + 7} textAnchor="end" className="fill-stone-400" fontSize="7">秒</text>
-      <text x={pad.l - 1} y={pad.t + 1} textAnchor="end" className="fill-stone-400" fontSize="7">ml</text>
+      {/* 軸單位：橫軸「秒」→右下角，縱軸「ml」→左上角（textAnchor=start 從 x=1 起，不與刻度文字重疊） */}
+      <text x={w - pad.r + 2} y={h - pad.b + 10} textAnchor="end" className="fill-stone-400" fontSize="7">秒</text>
+      <text x={1} y={pad.t - 1} textAnchor="start" className="fill-stone-400" fontSize="7">ml</text>
       <path d={pathD} fill="none" stroke="currentColor" strokeWidth="2" className="text-pour-500" strokeLinecap="round" strokeLinejoin="round" />
       {points.map((p, i) => (
         <g key={i}>
           <circle cx={p.x} cy={p.y} r={i === 0 ? 3.5 : 3} className="fill-pour-600" stroke={i === 0 ? '#fff' : 'none'} strokeWidth={i === 0 ? 0.75 : 0} />
           {i > 0 ? (
-            <text x={p.x} y={p.y - 6} textAnchor="middle" className="fill-stone-600" fontSize="7">{p.temp}°</text>
+            <text x={p.x} y={p.y - 5} textAnchor="middle" className="fill-stone-500" fontSize="7">{p.water}</text>
           ) : null}
         </g>
       ))}
@@ -589,7 +589,7 @@ const DEFAULT_TECHNIQUES = [
 const DEFAULT_METHODS = [
   {
     id: 'm1', name: '四六法',
-    coffeeWeight: 20, waterRatio: 15, waterTemp: 92, grindSize: 5,
+    coffeeWeight: 20, waterRatio: 15, waterTemp: 92, grindSize: 5, absorptionRate: 2,
     steps: [
       { intervalSec: 45, addWaterMl: 60,  temp: 92, technique: '悶蒸'    },
       { intervalSec: 45, addWaterMl: 60,  temp: 92, technique: '畫圈'    },
@@ -600,7 +600,7 @@ const DEFAULT_METHODS = [
   },
   {
     id: 'm2', name: '一刀流',
-    coffeeWeight: 20, waterRatio: 16, waterTemp: 93, grindSize: 4.5,
+    coffeeWeight: 20, waterRatio: 16, waterTemp: 93, grindSize: 4.5, absorptionRate: 2,
     steps: [
       { intervalSec: 45,  addWaterMl: 50,  temp: 93, technique: '悶蒸'    },
       { intervalSec: 120, addWaterMl: 270, temp: 93, technique: '螺旋注水' },
@@ -608,7 +608,7 @@ const DEFAULT_METHODS = [
   },
   {
     id: 'm3', name: '三段式',
-    coffeeWeight: 20, waterRatio: 15, waterTemp: 93, grindSize: 5,
+    coffeeWeight: 20, waterRatio: 15, waterTemp: 93, grindSize: 5, absorptionRate: 2,
     steps: [
       { intervalSec: 45, addWaterMl: 50,  temp: 93, technique: '悶蒸'    },
       { intervalSec: 60, addWaterMl: 100, temp: 93, technique: '畫圈'    },
@@ -629,29 +629,44 @@ const DEFAULT_POUR_PLAN_STEPS = [
 ]
 
 function migrateLegacyPlanSteps(raw) {
-  if (!raw?.length) return DEFAULT_POUR_PLAN_STEPS.map((s) => ({ ...s }))
-  if (raw[0] != null && raw[0].intervalSec != null && raw[0].addWaterMl != null) {
-    return raw.map((s) => ({
-      intervalSec: Math.max(0, Number(s.intervalSec) || 0),
-      addWaterMl: Math.max(0, Number(s.addWaterMl) || 0),
-      temp: asNumberOr(s.temp, 93),
-      technique: s.technique ?? '',
-    }))
+  const toStep = (s, waterValue, waterMode) => ({
+    intervalSec: Math.max(0, Number(s.intervalSec) || 0),
+    waterValue:  Math.max(0, Number(waterValue) || 0),
+    waterMode:   waterMode ?? 'fixed',
+    temp:        asNumberOr(s.temp, 93),
+    technique:   s.technique ?? '',
+  })
+  if (!raw?.length) return DEFAULT_POUR_PLAN_STEPS.map((s) => ({
+    intervalSec: Math.max(0, Number(s.intervalSec) || 0),
+    waterValue:  Math.max(0, Number(s.waterValue ?? s.addWaterMl) || 0),
+    waterMode:   s.waterMode ?? 'fixed',
+    temp:        asNumberOr(s.temp, 93),
+    technique:   s.technique ?? '',
+  }))
+  // 新格式：已有 intervalSec + waterValue
+  if (raw[0]?.intervalSec != null && raw[0]?.waterValue != null) {
+    return raw.map((s) => toStep(s, s.waterValue, s.waterMode))
   }
+  // 舊格式：已有 intervalSec + addWaterMl（升級為 fixed）
+  if (raw[0]?.intervalSec != null && raw[0]?.addWaterMl != null) {
+    return raw.map((s) => toStep(s, s.addWaterMl, 'fixed'))
+  }
+  // 最舊格式：time/water 絕對值對
   const out = []
   for (let i = 1; i < raw.length; i++) {
     const prev = raw[i - 1]
-    const cur = raw[i]
-    const t0 = Number(prev.time) || 0
-    const t1 = Number(cur.time) || 0
-    const w0 = Number(prev.water) || 0
-    const w1 = Number(cur.water) || 0
+    const cur  = raw[i]
+    const t0   = Number(prev.time) || 0
+    const t1   = Number(cur.time)  || 0
+    const w0   = Number(prev.water) || 0
+    const w1   = Number(cur.water)  || 0
     const isLast = i === raw.length - 1
     out.push({
       intervalSec: Math.max(0, t1 - t0),
-      addWaterMl: Math.max(0, w1 - w0),
-      temp: asNumberOr(cur.temp, 93),
-      technique: (isLast ? cur.technique : prev.technique) ?? '',
+      waterValue:  Math.max(0, w1 - w0),
+      waterMode:   'fixed',
+      temp:        asNumberOr(cur.temp, 93),
+      technique:   (isLast ? cur.technique : prev.technique) ?? '',
     })
   }
   return out.length ? out : DEFAULT_POUR_PLAN_STEPS.map((s) => ({ ...s }))
@@ -661,18 +676,20 @@ function migrateLegacyPlanSteps(raw) {
 function planStepsToEditBuffer(steps) {
   return steps.map((s) => ({
     intervalSec: String(s.intervalSec ?? ''),
-    addWaterMl: String(s.addWaterMl ?? ''),
-    temp: String(s.temp ?? ''),
-    technique: s.technique ?? '',
+    waterValue:  String(s.waterValue ?? s.addWaterMl ?? ''),
+    waterMode:   s.waterMode ?? 'fixed',
+    temp:        String(s.temp ?? ''),
+    technique:   s.technique ?? '',
   }))
 }
 
 function commitPlanStepsBuffer(buf) {
   return buf.map((s) => ({
     intervalSec: Math.max(0, Number(s.intervalSec) || 0),
-    addWaterMl: Math.max(0, Number(s.addWaterMl) || 0),
-    temp: asNumberOr(s.temp, 93),
-    technique: s.technique ?? '',
+    waterValue:  Math.max(0, Number(s.waterValue)  || 0),
+    waterMode:   s.waterMode ?? 'fixed',
+    temp:        asNumberOr(s.temp, 93),
+    technique:   s.technique ?? '',
   }))
 }
 
@@ -683,15 +700,23 @@ function stepStartSecFromIntervals(steps, i) {
   return s
 }
 
-/** 折線圖用：含 (0,0) 起點，之後每步終點 */
-function buildChartPointsFromPlan(steps) {
+/** 解析單步實際水量（支援 waterValue+waterMode 雙軌，並向下相容 addWaterMl） */
+function resolveStepWater(step, totalWater) {
+  const mode = step.waterMode ?? 'fixed'
+  const val  = step.waterValue ?? step.addWaterMl ?? 0
+  if (mode === 'percent') return Math.round((totalWater || 0) * (Number(val) || 0) / 100)
+  return Math.max(0, Number(val) || 0)
+}
+
+/** 折線圖用：含 (0,0) 起點，之後每步終點（需傳 totalWater 以解析 percent 步驟） */
+function buildChartPointsFromPlan(steps, totalWater = 0) {
   let t = 0
   let w = 0
   const pts = [{ time: 0, water: 0, temp: steps[0] != null ? asNumberOr(steps[0].temp, 93) : 93 }]
   for (let i = 0; i < steps.length; i++) {
     const s = steps[i]
     const is = Math.max(0, Number(s.intervalSec) || 0)
-    const aw = Math.max(0, Number(s.addWaterMl) || 0)
+    const aw = resolveStepWater(s, totalWater)
     t += is
     w += aw
     pts.push({ time: t, water: w, temp: asNumberOr(s.temp, 93) })
@@ -741,6 +766,9 @@ function clampWaterTemp(v) {
 function clampGrindSize(v) {
   return Math.min(10, Math.max(0, Math.round(v * 2) / 2))
 }
+function clampAbsorption(v) {
+  return Math.min(5, Math.max(0, Math.round(v * 10) / 10))
+}
 
 function PourOverTab() {
   // ── 持久化狀態 ────────────────────────────────────────────────────────────
@@ -752,15 +780,13 @@ function PourOverTab() {
 
   // ── 揮發狀態 ─────────────────────────────────────────────────────────────
   const [planEditing, setPlanEditing]     = useState(false)
+  const [tableEditing, setTableEditing]   = useState(false)
   const [planStepsEditBuffer, setPlanStepsEditBuffer] = useState(null)
   const [showTechniqueForm, setShowTechniqueForm] = useState(false)
   const [editingTechnique, setEditingTechnique]   = useState(null)
   const [inlineTechniqueId, setInlineTechniqueId] = useState(null)
   const [newTechniqueDraft, setNewTechniqueDraft] = useState(null) // 新增草稿，未儲存前不寫入 techniques
-  const [selectedTechForChart, setSelectedTechForChart] = useState(null)
-  const [flavorIssue, setFlavorIssue]     = useState(null)
-  const [troubleKey, setTroubleKey]       = useState(null)
-  const [activeTechnique, setActiveTechnique] = useState(null)
+  const [techniqueCardOpen, setTechniqueCardOpen] = useState(false)
   const [showBrewTimer, setShowBrewTimer] = useState(false)
   const [showBrewLogModal, setShowBrewLogModal] = useState(false)
   const [brewExecution, setBrewExecution]   = useState(7)
@@ -769,13 +795,14 @@ function PourOverTab() {
   const [brewCons, setBrewCons]             = useState('')
   const [brewActualParams, setBrewActualParams] = useState({ cw: '20', wr: '15', wt: '92', gs: '5' })
   const [brewDirection, setBrewDirection] = useState('')
-  const [methodParamDraft, setMethodParamDraft] = useState({ cw: '20', wr: '15', wt: '92', gs: '5' })
+  const [methodParamDraft, setMethodParamDraft] = useState({ cw: '20', wr: '15', wt: '92', gs: '5', ar: '2' })
   const [showNewBeanModal, setShowNewBeanModal] = useState(false)
   const [newBeanNameInput, setNewBeanNameInput] = useState('')
   const [showNewMethodModal, setShowNewMethodModal] = useState(false)
   const [newMethodNameInput, setNewMethodNameInput] = useState('')
   const [historySectionOpen, setHistorySectionOpen] = useState(true)
   const [logDetailOpen, setLogDetailOpen] = useState({})
+  const [historyFilterBeanId, setHistoryFilterBeanId] = useState('')
 
   // ── 首次種子資料 ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -806,12 +833,13 @@ function PourOverTab() {
   useEffect(() => {
     if (!currentMethod) return
     setMethodParamDraft({
-      cw: String(currentMethod.coffeeWeight ?? 20),
-      wr: String(currentMethod.waterRatio   ?? 15),
-      wt: String(currentMethod.waterTemp    ?? 92),
-      gs: String(currentMethod.grindSize    ?? 5),
+      cw: String(currentMethod.coffeeWeight   ?? 20),
+      wr: String(currentMethod.waterRatio     ?? 15),
+      wt: String(currentMethod.waterTemp      ?? 92),
+      gs: String(currentMethod.grindSize      ?? 5),
+      ar: String(currentMethod.absorptionRate ?? 2),
     })
-    if (planEditing) {
+    if (planEditing || tableEditing) {
       const steps = migrateLegacyPlanSteps(
         currentMethod.steps?.length ? currentMethod.steps : DEFAULT_POUR_PLAN_STEPS
       )
@@ -830,52 +858,32 @@ function PourOverTab() {
     () => migrateLegacyPlanSteps(currentMethod?.steps?.length ? currentMethod.steps : DEFAULT_POUR_PLAN_STEPS),
     [currentMethod?.steps, currentMethod?.id]
   )
-  const planStepsForChart = useMemo(() => {
-    if (planEditing && planStepsEditBuffer != null) return commitPlanStepsBuffer(planStepsEditBuffer)
-    return planSteps
-  }, [planEditing, planStepsEditBuffer, planSteps])
-  const chartPoints = useMemo(() => buildChartPointsFromPlan(planStepsForChart), [planStepsForChart])
-
   const cwParsed = parseFloat(methodParamDraft.cw)
   const wrParsed = parseFloat(methodParamDraft.wr)
   const wtParsed = parseFloat(methodParamDraft.wt)
   const gsParsed = parseFloat(methodParamDraft.gs)
-  const effCoffeeWeight = Number.isNaN(cwParsed) ? coffeeWeight : cwParsed
-  const effWaterRatio   = Number.isNaN(wrParsed) ? waterRatio  : wrParsed
-  const effWaterTemp    = Number.isNaN(wtParsed) ? waterTemp   : wtParsed
-  const effGrindSize    = Number.isNaN(gsParsed) ? grindSize   : gsParsed
-  const totalWater  = Math.round(effCoffeeWeight * effWaterRatio * 10) / 10
+  const arParsed = parseFloat(methodParamDraft.ar)
+  const effCoffeeWeight    = Number.isNaN(cwParsed) ? coffeeWeight : cwParsed
+  const effWaterRatio      = Number.isNaN(wrParsed) ? waterRatio  : wrParsed
+  const effWaterTemp       = Number.isNaN(wtParsed) ? waterTemp   : wtParsed
+  const effGrindSize       = Number.isNaN(gsParsed) ? grindSize   : gsParsed
+  const effAbsorptionRate  = Number.isNaN(arParsed) ? (currentMethod?.absorptionRate ?? 2) : arParsed
+  // 百分比步驟計算基數：含吸水率的總投水量 = (粉水比 + 吸水率) × 粉重
+  const totalWater = Math.round(effCoffeeWeight * (effWaterRatio + effAbsorptionRate) * 10) / 10
+
+  const planStepsForChart = useMemo(() => {
+    if (planStepsEditBuffer != null) return commitPlanStepsBuffer(planStepsEditBuffer)
+    return planSteps
+  }, [planStepsEditBuffer, planSteps])
+  const chartPoints = useMemo(() => buildChartPointsFromPlan(planStepsForChart, totalWater), [planStepsForChart, totalWater])
   const tableMaxSec = chartPoints.length ? Math.max(...chartPoints.map((p) => p.time)) : 0
   const timeAxisMax = Math.max(60, Math.ceil(tableMaxSec / 60) * 60)
-  const pourTableRows = planEditing && planStepsEditBuffer ? planStepsEditBuffer : planSteps
+  const pourTableRows = tableEditing && planStepsEditBuffer ? planStepsEditBuffer : planSteps
 
-  // ── 技巧加成圖 ────────────────────────────────────────────────────────────
-  const baseFlavor = { acid: 5, sweet: 5, bitter: 3, body: 4, clean: 7 }
-  const FLAVOR_EQUALIZER_TECHNIQUES = [
-    { id: 'big-flow',  name: '大水流擾動',   mod: { acid: 0, sweet: -1, bitter: 2, body: 1, clean: -3 } },
-    { id: 'center-ji', name: '中心の字繞圈', mod: { acid: 1, sweet: 0, bitter: -1, body: -1, clean: 2 } },
-    { id: 'tail-wash', name: '尾段洗刷粉牆', mod: { acid: -1, sweet: 2, bitter: 1, body: 2, clean: -1 } },
-  ]
-  const flavorKeys = [
-    { key: 'acid', label: '酸值' }, { key: 'sweet', label: '甜感' },
-    { key: 'bitter', label: '苦味' }, { key: 'body', label: '厚度' }, { key: 'clean', label: '乾淨度' },
-  ]
   const techniqueScoreKeys = [
     { key: 'bonusExt', label: '萃取' }, { key: 'bonusFlow', label: '水流' },
     { key: 'bonusBed', label: '粉層' }, { key: 'bonusEven', label: '均勻' },
   ]
-  const normalizedTechniques = useMemo(
-    () => techniques.map((t) => ({
-      ...t,
-      bonusExt: asNumberOr(t.bonusExt, 0), bonusFlow: asNumberOr(t.bonusFlow, 0),
-      bonusBed: asNumberOr(t.bonusBed, 0), bonusEven: asNumberOr(t.bonusEven, 0),
-    })),
-    [techniques]
-  )
-  const activeTechniqueBoost = useMemo(
-    () => normalizedTechniques.find((t) => t.id === selectedTechForChart) ?? normalizedTechniques[0] ?? null,
-    [normalizedTechniques, selectedTechForChart]
-  )
 
   // ── helpers ───────────────────────────────────────────────────────────────
   const patchCurrentBean = (patch) => {
@@ -892,21 +900,25 @@ function PourOverTab() {
     )
   }
   const togglePlanEditing = () => {
-    if (planEditing) {
+    setPlanEditing((v) => !v)
+  }
+  const toggleTableEditing = () => {
+    if (tableEditing) {
       if (planStepsEditBuffer) patchCurrentMethod({ steps: commitPlanStepsBuffer(planStepsEditBuffer) })
-      setPlanStepsEditBuffer(null); setPlanEditing(false)
+      setPlanStepsEditBuffer(null)
+      setTableEditing(false)
     } else {
       setPlanStepsEditBuffer(planStepsToEditBuffer(
         migrateLegacyPlanSteps(currentMethod?.steps?.length ? currentMethod.steps : DEFAULT_POUR_PLAN_STEPS)
       ))
-      setPlanEditing(true)
+      setTableEditing(true)
     }
   }
   const openAddBeanModal = () => { setNewBeanNameInput(''); setShowNewBeanModal(true) }
   const confirmAddBean = () => {
     const name = newBeanNameInput.trim() || '新豆子'
-    if (planEditing && planStepsEditBuffer) patchCurrentMethod({ steps: commitPlanStepsBuffer(planStepsEditBuffer) })
-    setPlanStepsEditBuffer(null); setPlanEditing(false)
+    if (planStepsEditBuffer) patchCurrentMethod({ steps: commitPlanStepsBuffer(planStepsEditBuffer) })
+    setPlanStepsEditBuffer(null); setPlanEditing(false); setTableEditing(false)
     const nb = createDefaultBean({ name, defaultMethodId: selectedMethodId })
     setBeans((prev) => [...prev, nb]); setSelectedBeanId(nb.id)
     setShowNewBeanModal(false); setNewBeanNameInput('')
@@ -917,7 +929,7 @@ function PourOverTab() {
     if (!window.confirm(`確定刪除「${currentBean.name || '未命名'}」？`)) return
     const next = beans.filter((b) => b.id !== currentBean.id)
     setBeans(next); setSelectedBeanId(next[0]?.id ?? '')
-    setPlanStepsEditBuffer(null); setPlanEditing(false)
+    setPlanStepsEditBuffer(null); setPlanEditing(false); setTableEditing(false)
   }
   const openAddMethodModal = () => { setNewMethodNameInput(''); setShowNewMethodModal(true) }
   const confirmAddMethod = () => {
@@ -943,11 +955,11 @@ function PourOverTab() {
     setPlanStepsEditBuffer(null)
   }
   const handleDeleteBrewLog = (log, hi) => {
-    if (!currentBean) return
     if (!window.confirm('確定刪除此筆沖煮紀錄？')) return
     const rowKey = log.id ?? `hist-${log.date}-${hi}`
+    const targetBeanId = log.beanId ?? currentBean?.id
     setBeans((prev) => prev.map((b) => {
-      if (b.id !== currentBean.id) return b
+      if (b.id !== targetBeanId) return b
       return { ...b, history: (b.history || []).filter((h) => h !== log) }
     }))
     setLogDetailOpen((prev) => { const n = { ...prev }; delete n[rowKey]; return n })
@@ -965,16 +977,16 @@ function PourOverTab() {
       const startT = stepStartSecFromIntervals(steps, i)
       const intervalSec = Math.max(0, Number(s.intervalSec) || 0)
       const endT = startT + intervalSec
-      const addWaterMl = Math.max(0, Number(s.addWaterMl) || 0)
+      const segWater = resolveStepWater(s, totalWater)
       let cumPrevW = 0
-      for (let k = 0; k < i; k++) cumPrevW += Math.max(0, Number(steps[k]?.addWaterMl) || 0)
-      const cumW = cumPrevW + addWaterMl
+      for (let k = 0; k < i; k++) cumPrevW += resolveStepWater(steps[k], totalWater)
+      const cumW = cumPrevW + segWater
       return {
         startTime: startT,
         time: endT,
         intervalSec,
         cumulativeWater: cumW,
-        segmentWater: addWaterMl,
+        segmentWater: segWater,
         temp: s.temp,
         technique: s.technique || '',
       }
@@ -989,23 +1001,32 @@ function PourOverTab() {
     const entry = {
       id: `log-${Date.now()}`,
       date: formatBrewDateTime(),
-      methodId: currentMethod?.id ?? '',
+      beanId: currentBean.id,
+      beanSnapshot: {
+        name:       currentBean.name       ?? '',
+        origin:     currentBean.origin     ?? '',
+        variety:    currentBean.variety    ?? '',
+        process:    currentBean.process    ?? '',
+        roast:      currentBean.roast      ?? '',
+        flavorNote: currentBean.flavorNote ?? '',
+      },
+      methodId:   currentMethod?.id   ?? '',
       methodName: currentMethod?.name ?? '',
       coffeeWeight: actualCw,
-      waterRatio: actualWr,
-      waterTemp: actualWt,
-      grindSize: actualGs,
+      waterRatio:   actualWr,
+      waterTemp:    actualWt,
+      grindSize:    actualGs,
       executionScore: Math.min(10, Math.max(1, Number(brewExecution) || 5)),
-      resultScore: Math.min(10, Math.max(1, Number(brewResult) || 5)),
-      pros: brewPros.trim(),
-      cons: brewCons.trim(),
+      resultScore:    Math.min(10, Math.max(1, Number(brewResult) || 5)),
+      pros:      brewPros.trim(),
+      cons:      brewCons.trim(),
       direction: brewDirection.trim(),
-      // 只儲存原始 steps，節省空間（每筆省約 40%）
       steps: planStepsForChart.map((s) => ({
         intervalSec: Math.max(0, Number(s.intervalSec) || 0),
-        addWaterMl: Math.max(0, Number(s.addWaterMl) || 0),
-        temp: asNumberOr(s.temp, actualWt),
-        technique: s.technique || '',
+        waterValue:  Math.max(0, Number(s.waterValue ?? s.addWaterMl) || 0),
+        waterMode:   s.waterMode ?? 'fixed',
+        temp:        asNumberOr(s.temp, actualWt),
+        technique:   s.technique || '',
       })),
     }
     setBeans((prev) =>
@@ -1021,42 +1042,67 @@ function PourOverTab() {
     setShowBrewLogModal(false)
   }
 
-  const sortedHistory = currentBean?.history?.length
-    ? [...currentBean.history].sort((a, b) => String(b.date).localeCompare(String(a.date)))
-    : []
+  // 彙整所有豆子的歷史，並補上 beanId/beanName（相容舊紀錄）
+  const allHistory = beans.flatMap((b) =>
+    (b.history || []).map((log) => ({
+      ...log,
+      beanId:   log.beanId   ?? b.id,
+      beanName: log.beanSnapshot?.name ?? log.beanName ?? b.name,
+    }))
+  ).sort((a, b) => String(b.date).localeCompare(String(a.date)))
+  const sortedHistory = historyFilterBeanId
+    ? allHistory.filter((log) => log.beanId === historyFilterBeanId)
+    : allHistory
 
   return (
     <div className="space-y-3 pb-24">
       {/* 目標總注水量 */}
       <section className="rounded-xl bg-pour-700 p-3 text-white shadow transition-colors">
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-          {planEditing && currentBean ? (
-            <input
-              type="text"
-              value={currentBean.name ?? ''}
-              onChange={(e) => patchCurrentBean({ name: e.target.value })}
-              className="rounded border border-white/40 bg-white/15 px-2 py-0.5 text-sm font-medium text-white placeholder:text-pour-200 focus:border-white focus:outline-none"
-              placeholder="豆子名稱"
-              aria-label="豆子名稱"
-            />
-          ) : (
-            <button
-              type="button"
-              onClick={handleRenameBean}
-              className="shrink-0 text-left text-sm font-semibold underline-offset-2 transition hover:underline active:opacity-90"
-              title="點擊修改豆子名稱"
-            >
-              {currentBean ? currentBean.name : '—'}
-            </button>
-          )}
-          <span className="text-xs text-pour-200 leading-5">
-            {[
-              currentBean?.origin && `產地 ${currentBean.origin}`,
-              currentBean?.variety && `品種 ${currentBean.variety}`,
-              currentBean?.process && `加工 ${currentBean.process}`,
-              currentBean?.roast && `焙 ${currentBean.roast}`,
-            ].filter(Boolean).join(' · ') || <span className="opacity-60">尚未填寫豆子資訊</span>}
-          </span>
+        <div className="flex items-baseline gap-x-2 gap-y-0.5">
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 flex-1 min-w-0">
+            {planEditing && currentBean ? (
+              <input
+                type="text"
+                value={currentBean.name ?? ''}
+                onChange={(e) => patchCurrentBean({ name: e.target.value })}
+                className="rounded border border-white/40 bg-white/15 px-2 py-0.5 text-sm font-medium text-white placeholder:text-pour-200 focus:border-white focus:outline-none"
+                placeholder="豆子名稱"
+                aria-label="豆子名稱"
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={handleRenameBean}
+                className="shrink-0 text-left text-sm font-semibold underline-offset-2 transition hover:underline active:opacity-90"
+                title="點擊修改豆子名稱"
+              >
+                {currentBean ? currentBean.name : '—'}
+              </button>
+            )}
+            <span className="text-xs text-pour-200 leading-5">
+              {[
+                currentBean?.origin && `產地 ${currentBean.origin}`,
+                currentBean?.variety && `品種 ${currentBean.variety}`,
+                currentBean?.process && `加工 ${currentBean.process}`,
+                currentBean?.roast && `焙 ${currentBean.roast}`,
+              ].filter(Boolean).join(' · ') || <span className="opacity-60">尚未填寫豆子資訊</span>}
+            </span>
+          </div>
+          {/* 總水量/水量 */}
+          {(() => {
+            const cw = parseFloat(methodParamDraft.cw)
+            const wr = parseFloat(methodParamDraft.wr)
+            const ar = parseFloat(methodParamDraft.ar)
+            if (Number.isNaN(cw) || Number.isNaN(wr)) return null
+            const waterVol = Math.round(wr * cw)
+            const totalVol = Number.isNaN(ar) ? null : Math.round((wr + ar) * cw)
+            return (
+              <span className="shrink-0 tabular-nums text-right leading-none">
+                <span className="text-base font-bold text-pour-100">{totalVol != null ? totalVol : waterVol}</span>
+                <span className="text-xs font-normal text-pour-300">/{waterVol} ml</span>
+              </span>
+            )
+          })()}
         </div>
         {currentBean?.flavorNote && (
           <div className="mt-1 text-xs text-pour-200">風味特色：{currentBean.flavorNote}</div>
@@ -1086,6 +1132,35 @@ function PourOverTab() {
           aria-label="編輯">
           <EditIcon className="h-3 w-3" />
         </button>
+      </section>
+
+      {/* 快速參數列（常駐顯示） */}
+      <section className="flex items-center gap-1.5">
+        {/* 粉水比 */}
+        {[
+          { labelLeft: '1:', labelRight: null, key: 'wr', inputMode: 'decimal', placeholder: '粉水比', clamp: clampWaterRatio, def: 15, fieldKey: 'waterRatio' },
+          { labelLeft: null, labelRight: 'g',  key: 'cw', inputMode: 'decimal', placeholder: '粉重',   clamp: clampCoffeeWeight, def: 20, fieldKey: 'coffeeWeight' },
+          { labelLeft: null, labelRight: null,  key: 'ar', inputMode: 'decimal', placeholder: '吸水率', clamp: clampAbsorption, def: 2, fieldKey: 'absorptionRate' },
+          { labelLeft: '#', labelRight: null,  key: 'gs', inputMode: 'decimal', placeholder: '研磨',   clamp: clampGrindSize, def: 5, fieldKey: 'grindSize' },
+        ].map(({ labelLeft, labelRight, key, inputMode, placeholder, clamp, def, fieldKey }) => (
+          <label key={key} className="flex flex-1 items-center gap-1 rounded-lg border border-stone-200 bg-white px-2 py-1.5">
+            {labelLeft && <span className="shrink-0 text-[11px] text-stone-400">{labelLeft}</span>}
+            <input
+              type="text" inputMode={inputMode} autoComplete="off" placeholder={placeholder}
+              value={methodParamDraft[key]}
+              onChange={(e) => setMethodParamDraft((p) => ({ ...p, [key]: e.target.value }))}
+              onBlur={() => {
+                const v = parseFloat(methodParamDraft[key])
+                if (Number.isNaN(v)) { patchCurrentMethod({ [fieldKey]: def }); setMethodParamDraft((p) => ({ ...p, [key]: String(def) })); return }
+                const c = clamp(v)
+                patchCurrentMethod({ [fieldKey]: c })
+                setMethodParamDraft((p) => ({ ...p, [key]: String(c) }))
+              }}
+              className="w-full min-w-0 text-sm tabular-nums text-stone-800 outline-none placeholder:text-stone-300"
+            />
+            {labelRight && <span className="shrink-0 text-[11px] text-stone-400">{labelRight}</span>}
+          </label>
+        ))}
       </section>
 
       {/* 編輯面板（義式濃縮同款卡片配置） */}
@@ -1145,44 +1220,6 @@ function PourOverTab() {
                 className="shrink-0 w-12 rounded py-1.5 text-center text-xs font-medium text-white bg-red-500 transition active:bg-red-600 disabled:opacity-30 disabled:cursor-not-allowed"
                 aria-label="刪除手法">刪除</button>
             </div>
-            <div className="grid grid-cols-4 gap-2 text-[13px]">
-              <input type="text" inputMode="decimal" autoComplete="off" placeholder="粉重 (g)"
-                value={methodParamDraft.cw}
-                onChange={(e) => setMethodParamDraft((p) => ({ ...p, cw: e.target.value }))}
-                onBlur={() => {
-                  const v = parseFloat(methodParamDraft.cw)
-                  if (Number.isNaN(v)) { patchCurrentMethod({ coffeeWeight: 20 }); setMethodParamDraft((p) => ({ ...p, cw: '20' })); return }
-                  const c = clampCoffeeWeight(v); patchCurrentMethod({ coffeeWeight: c }); setMethodParamDraft((p) => ({ ...p, cw: String(c) }))
-                }}
-                className={INPUT_CELL} />
-              <input type="text" inputMode="decimal" autoComplete="off" placeholder="粉水比 1:"
-                value={methodParamDraft.wr}
-                onChange={(e) => setMethodParamDraft((p) => ({ ...p, wr: e.target.value }))}
-                onBlur={() => {
-                  const v = parseFloat(methodParamDraft.wr)
-                  if (Number.isNaN(v)) { patchCurrentMethod({ waterRatio: 15 }); setMethodParamDraft((p) => ({ ...p, wr: '15' })); return }
-                  const c = clampWaterRatio(v); patchCurrentMethod({ waterRatio: c }); setMethodParamDraft((p) => ({ ...p, wr: String(c) }))
-                }}
-                className={INPUT_CELL} />
-              <input type="text" inputMode="numeric" autoComplete="off" placeholder="水溫 °C"
-                value={methodParamDraft.wt}
-                onChange={(e) => setMethodParamDraft((p) => ({ ...p, wt: e.target.value }))}
-                onBlur={() => {
-                  const v = parseFloat(methodParamDraft.wt)
-                  if (Number.isNaN(v)) { patchCurrentMethod({ waterTemp: 92 }); setMethodParamDraft((p) => ({ ...p, wt: '92' })); return }
-                  const c = clampWaterTemp(v); patchCurrentMethod({ waterTemp: c }); setMethodParamDraft((p) => ({ ...p, wt: String(c) }))
-                }}
-                className={INPUT_CELL} />
-              <input type="text" inputMode="decimal" autoComplete="off" placeholder="研磨 1–10"
-                value={methodParamDraft.gs}
-                onChange={(e) => setMethodParamDraft((p) => ({ ...p, gs: e.target.value }))}
-                onBlur={() => {
-                  const v = parseFloat(methodParamDraft.gs)
-                  if (Number.isNaN(v)) { patchCurrentMethod({ grindSize: 5 }); setMethodParamDraft((p) => ({ ...p, gs: '5' })); return }
-                  const c = clampGrindSize(v); patchCurrentMethod({ grindSize: c }); setMethodParamDraft((p) => ({ ...p, gs: String(c) }))
-                }}
-                className={INPUT_CELL} />
-            </div>
           </div>
         </section>
       )}
@@ -1195,8 +1232,14 @@ function PourOverTab() {
           : (techniques.find((t) => t.id === (inlineTechniqueId ?? techniques[0]?.id)) ?? techniques[0] ?? null)
         const effectiveId = isCreating ? '__new__' : (activeTech?.id ?? '')
         return (
-          <section className="rounded-xl border border-stone-200 bg-white py-3 shadow-sm">
-            <div className="px-3">
+          <section className="rounded-xl border border-stone-200 bg-white shadow-sm overflow-hidden">
+            <button type="button"
+              onClick={() => setTechniqueCardOpen((o) => !o)}
+              className="flex w-full items-center justify-between px-3 py-2.5 text-left transition active:bg-stone-50">
+              <span className="text-xs font-semibold text-stone-500">沖煮技巧</span>
+              <span className="text-stone-400 text-sm">{techniqueCardOpen ? '▼' : '▶'}</span>
+            </button>
+            {techniqueCardOpen && <div className="px-3 pb-3 border-t border-stone-100 pt-2">
               <div className="flex items-center gap-2 mb-1.5">
                 <span className="text-xs font-semibold text-stone-500 shrink-0">技巧</span>
                 <select
@@ -1244,7 +1287,7 @@ function PourOverTab() {
                   inline
                 />
               )}
-            </div>
+            </div>}
           </section>
         )
       })()}
@@ -1263,23 +1306,23 @@ function PourOverTab() {
         <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white shadow-sm">
           <table className="w-full min-w-[420px] table-fixed text-xs">
             <colgroup>
-              <col className="w-[11%]" />
-              <col className="w-[15%]" />
-              <col className="w-[15%]" />
-              <col className="w-[13%]" />
-              <col className="w-[26%]" />
-              <col className="w-[10%]" />
+              {/* 9 份等距：t₀ Δt ΔW ΣW T v 各 1 份，μ（手法）佔 2 份，刪除 1 份 */}
+              {[1,1,1,1,1,1,2,1].map((span, i) => (
+                <col key={i} style={{ width: `${span / 9 * 100}%` }} />
+              ))}
             </colgroup>
             <thead>
               <tr className="border-b border-stone-200 bg-stone-50">
                 <th title="起點（秒）" className="p-1.5 font-semibold text-stone-600 text-center">t₀</th>
                 <th title="間格時間（秒）" className="p-1.5 font-semibold text-stone-600 text-center">Δt</th>
-                <th title="加水量（ml）" className="p-1.5 font-semibold text-stone-600 text-center">ΔW</th>
+                <th title="本段加水量" className="p-1.5 font-semibold text-stone-600 text-center">ΔW</th>
+                <th title="累計總水量" className="p-1.5 font-semibold text-stone-600 text-center">ΣW</th>
                 <th title="水溫（°C）" className="p-1.5 font-semibold text-stone-600 text-center">T</th>
+                <th title="流速（ml/s）" className="p-1.5 font-semibold text-stone-600 text-center">v</th>
                 <th title="沖煮技巧" className="p-1.5 font-semibold text-stone-600 text-left pl-[10px]">
                   <span className="flex items-center gap-1">
                     μ
-                    {planEditing && (
+                    {tableEditing && (
                       <button
                         type="button"
                         onClick={() => { setEditingTechnique(null); setShowTechniqueForm(true) }}
@@ -1289,36 +1332,48 @@ function PourOverTab() {
                     )}
                   </span>
                 </th>
-                <th className="p-1.5 font-semibold text-stone-600 text-right pr-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!planEditing || !planStepsEditBuffer) return
-                      setPlanStepsEditBuffer((buf) => [
-                        ...buf,
-                        {
-                          intervalSec: '45',
-                          addWaterMl: '0',
-                          temp: String(Math.round(effWaterTemp)),
-                          technique: techniques[0]?.name ?? '',
-                        },
-                      ])
-                    }}
-                    className="text-[10px] font-medium text-pour-600"
-                  >
-                    新增
-                  </button>
+                <th className="p-1 font-semibold text-stone-600">
+                  <div className="flex items-center justify-center gap-1">
+                    <button
+                      type="button"
+                      onClick={toggleTableEditing}
+                      className={`text-[10px] font-medium leading-none transition ${tableEditing ? 'text-pour-700 font-semibold' : 'text-stone-400'}`}
+                    >
+                      {tableEditing ? '完成' : '編輯'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!tableEditing || !planStepsEditBuffer) return
+                        setPlanStepsEditBuffer((buf) => [
+                          ...buf,
+                          {
+                            intervalSec: '45',
+                            waterValue:  '0',
+                            waterMode:   'fixed',
+                            temp:        String(Math.round(effWaterTemp)),
+                            technique:   techniques[0]?.name ?? '',
+                          },
+                        ])
+                      }}
+                      className={`text-[10px] font-medium leading-none transition ${tableEditing ? 'text-pour-600' : 'text-stone-200'}`}
+                    >
+                      新增
+                    </button>
+                  </div>
                 </th>
               </tr>
             </thead>
             <tbody>
               {pourTableRows.map((step, i) => {
-                const readOnly = !planEditing
+                const readOnly = !tableEditing
                 const techniqueNames = techniques.map((t) => t.name)
                 const techniqueOrphan = Boolean(step.technique && !techniqueNames.includes(step.technique))
                 const tStart = stepStartSecFromIntervals(pourTableRows, i)
                 const intervalShown = Math.max(0, Number(step.intervalSec) || 0)
-                const waterShown = Math.max(0, Number(step.addWaterMl) || 0)
+                const stepWaterMode = step.waterMode ?? 'fixed'
+                const actualWaterThis = resolveStepWater(step, totalWater)
+                const cumWater = pourTableRows.slice(0, i + 1).reduce((sum, s) => sum + resolveStepWater(s, totalWater), 0)
                 const tempShown = asNumberOr(step.temp, 93)
                 return (
                 <tr key={i} className="border-b border-stone-100">
@@ -1337,23 +1392,41 @@ function PourOverTab() {
                         autoComplete="off"
                         value={step.intervalSec}
                         onChange={(e) => updatePlanEditRow(i, 'intervalSec', e.target.value)}
-                        className="w-12 rounded border border-stone-200 py-1 px-1 text-center tabular-nums"
+                        className="w-full rounded border border-stone-200 py-1 px-1 text-center tabular-nums"
                       />
                     )}
                   </td>
+                  {/* ΔW：雙軌制（% / ml） */}
                   <td className="p-1 text-center align-middle">
                     {readOnly ? (
-                      <span className="tabular-nums text-stone-700">{waterShown}</span>
+                      <span className="tabular-nums text-stone-700">
+                        {stepWaterMode === 'percent' ? `${step.waterValue ?? 0}%` : actualWaterThis}
+                      </span>
                     ) : (
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        autoComplete="off"
-                        value={step.addWaterMl}
-                        onChange={(e) => updatePlanEditRow(i, 'addWaterMl', e.target.value)}
-                        className="w-14 rounded border border-stone-200 py-1 px-1 text-center tabular-nums"
-                      />
+                      <div className="flex flex-col items-center gap-0.5">
+                        <div className="flex items-stretch">
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            autoComplete="off"
+                            value={step.waterValue ?? ''}
+                            onChange={(e) => updatePlanEditRow(i, 'waterValue', e.target.value)}
+                            className="w-9 rounded-l border border-stone-200 py-1 px-0.5 text-center tabular-nums text-xs"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => updatePlanEditRow(i, 'waterMode', stepWaterMode === 'percent' ? 'fixed' : 'percent')}
+                            className="rounded-r border border-l-0 border-stone-200 bg-stone-100 px-1 text-[10px] text-stone-600 leading-none"
+                          >
+                            {stepWaterMode === 'percent' ? '%' : 'ml'}
+                          </button>
+                        </div>
+                      </div>
                     )}
+                  </td>
+                  {/* ΣW：累計總水量 */}
+                  <td className="p-1 text-center align-middle tabular-nums text-stone-700">
+                    {cumWater}
                   </td>
                   <td className="p-1 text-center align-middle">
                     {readOnly ? (
@@ -1365,16 +1438,24 @@ function PourOverTab() {
                         autoComplete="off"
                         value={step.temp}
                         onChange={(e) => updatePlanEditRow(i, 'temp', e.target.value)}
-                        className="w-12 rounded border border-stone-200 py-1 px-1 text-center tabular-nums"
+                        className="w-full rounded border border-stone-200 py-1 px-1 text-center tabular-nums"
                       />
                     )}
                   </td>
-                  <td className="p-1 align-middle pl-[10px]">
+                  {/* v：流速 ml/s */}
+                  <td className="p-1 text-center align-middle tabular-nums text-stone-700">
+                    {(() => {
+                      const sec = Math.max(0, Number(step.intervalSec) || 0)
+                      if (sec === 0) return <span className="text-stone-300">—</span>
+                      return (actualWaterThis / sec).toFixed(1)
+                    })()}
+                  </td>
+                  <td className="p-1 align-middle pl-[6px]">
                     <select
                       value={step.technique || ''}
                       onChange={readOnly ? undefined : (e) => updatePlanEditRow(i, 'technique', e.target.value)}
                       disabled={readOnly}
-                      className={`w-full max-w-[120px] rounded border border-stone-200 py-1 px-0.5 text-[11px] text-stone-700 disabled:opacity-100 ${readOnly ? 'border-transparent bg-transparent' : ''}`}
+                      className={`w-full max-w-[90px] rounded border border-stone-200 py-1 px-0.5 text-[11px] text-stone-700 disabled:opacity-100 ${readOnly ? 'border-transparent bg-transparent' : ''}`}
                     >
                       <option value="">—</option>
                       {techniqueOrphan ? <option value={step.technique}>{step.technique}</option> : null}
@@ -1433,17 +1514,28 @@ function PourOverTab() {
 
       {/* 歷史沖煮紀錄（區塊摺疊 + 單筆摺疊 + 刪除） */}
       <section>
-        <button
-          type="button"
-          onClick={() => setHistorySectionOpen((o) => !o)}
-          className="mb-2 flex w-full items-center justify-between rounded-lg border border-stone-200 bg-stone-50/80 px-3 py-2 text-left transition active:bg-stone-100"
-        >
-          <span className="text-xs font-semibold uppercase tracking-wider text-stone-600">歷史沖煮紀錄</span>
-          <span className="flex items-center gap-2 text-stone-500">
-            <span className="text-[11px] tabular-nums">{sortedHistory.length} 筆</span>
-            <span className="text-sm" aria-hidden>{historySectionOpen ? '▼' : '▶'}</span>
-          </span>
-        </button>
+        <div className="mb-2 flex items-center gap-2">
+          {/* 豆子篩選下拉 */}
+          <select
+            value={historyFilterBeanId}
+            onChange={(e) => setHistoryFilterBeanId(e.target.value)}
+            className="h-9 flex-1 min-w-0 rounded-lg border border-stone-200 bg-stone-50 px-2 text-xs text-stone-700 focus:border-pour-400 focus:outline-none"
+          >
+            <option value="">全部豆子</option>
+            {beans.map((b) => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => setHistorySectionOpen((o) => !o)}
+            className="h-9 flex shrink-0 items-center gap-1.5 rounded-lg border border-stone-200 bg-stone-50/80 px-3 transition active:bg-stone-100"
+          >
+            <span className="text-xs font-semibold uppercase tracking-wider text-stone-600">紀錄</span>
+            <span className="text-[11px] tabular-nums text-stone-500">{sortedHistory.length} 筆</span>
+            <span className="text-xs text-stone-400" aria-hidden>{historySectionOpen ? '▼' : '▶'}</span>
+          </button>
+        </div>
         {!historySectionOpen ? null : sortedHistory.length === 0 ? (
           <p className="rounded-lg border border-dashed border-stone-200 bg-stone-50/80 py-6 text-center text-xs text-stone-500">尚無紀錄，沖完後在上方填寫並儲存。</p>
         ) : (
@@ -1464,6 +1556,12 @@ function PourOverTab() {
                     >
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-xs font-semibold text-stone-800">{log.date}</span>
+                        {log.beanName && (
+                          <span className="rounded bg-pour-50 px-2 py-0.5 text-[11px] font-medium text-pour-800">{log.beanName}</span>
+                        )}
+                        {log.methodName && (
+                          <span className="text-[11px] text-stone-400">{log.methodName}</span>
+                        )}
                         <span className={`rounded px-2 py-0.5 text-[11px] font-bold tabular-nums ${log.executionScore >= 7 ? 'bg-emerald-100 text-emerald-900' : log.executionScore <= 4 ? 'bg-amber-100 text-amber-900' : 'bg-stone-100 text-stone-800'}`}>
                           執行 {log.executionScore}
                         </span>
@@ -1495,43 +1593,57 @@ function PourOverTab() {
                           <span className="font-medium text-amber-800">缺點</span> {log.cons}
                         </p>
                       ) : null}
-                      {log.pourPlan?.length ? (
-                        <div className="rounded-lg border border-stone-100 bg-stone-50/80 p-2">
-                          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-stone-500">當時注水計畫</p>
-                          <ul className="space-y-1.5 text-[11px] text-stone-700">
-                            {log.pourPlan.map((row, ri) => {
-                              const segFrom =
-                                row.startTime != null
-                                  ? row.startTime
-                                  : ri === 0
-                                    ? 0
-                                    : log.pourPlan[ri - 1]?.time ?? 0
-                              return (
-                              <li key={ri} className="rounded-md bg-white/90 px-2 py-1.5 leading-snug shadow-sm">
-                                <span className="font-medium tabular-nums text-stone-800">
-                                  {segFrom}–{row.time} 秒
-                                  {row.intervalSec != null ? (
-                                    <span className="font-normal text-stone-500">（間格 {row.intervalSec}s）</span>
-                                  ) : null}
-                                </span>
-                                <span className="text-stone-400"> · </span>
-                                本段 <span className="tabular-nums font-medium">{row.segmentWater}</span> ml
-                                <span className="text-stone-400"> · </span>
-                                累計 <span className="tabular-nums">{row.cumulativeWater}</span> ml
-                                {row.temp != null ? (
-                                  <>
-                                    <span className="text-stone-400"> · </span>
-                                    {row.temp}°C
-                                  </>
-                                ) : null}
-                                <span className="text-stone-400"> · </span>
-                                <span className="text-pour-800">{row.technique || '—'}</span>
-                              </li>
-                              )
-                            })}
-                          </ul>
-                        </div>
-                      ) : null}
+                      {(log.steps?.length || log.pourPlan?.length) ? (() => {
+                        // 同時支援新格式 steps 與舊格式 pourPlan
+                        const rows = log.steps?.length ? log.steps : log.pourPlan
+                        const isNewFmt = Boolean(log.steps?.length)
+                        // 計算每步實際水量（新格式需要 totalWater，用記錄當時的 waterRatio×coffeeWeight）
+                        const logTotalWater = isNewFmt
+                          ? Math.round((log.waterRatio ?? 15) * (log.coffeeWeight ?? 20))
+                          : 0
+                        let cumSec = 0
+                        return (
+                          <div className="rounded-lg border border-stone-100 bg-stone-50/80 overflow-hidden">
+                            <table className="w-full text-[11px]">
+                              <thead>
+                                <tr className="bg-stone-100/80 text-stone-500 text-center">
+                                  <th className="px-1.5 py-1 font-semibold">t₀</th>
+                                  <th className="px-1.5 py-1 font-semibold">Δt</th>
+                                  <th className="px-1.5 py-1 font-semibold">ΔW</th>
+                                  <th className="px-1.5 py-1 font-semibold">ΣW</th>
+                                  <th className="px-1.5 py-1 font-semibold">T</th>
+                                  <th className="px-1.5 py-1 font-semibold text-left">μ</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-stone-100">
+                                {rows.map((row, ri) => {
+                                  let segWater, cumWater
+                                  if (isNewFmt) {
+                                    segWater = resolveStepWater(row, logTotalWater)
+                                    cumWater = rows.slice(0, ri + 1).reduce((s, r) => s + resolveStepWater(r, logTotalWater), 0)
+                                  } else {
+                                    segWater = row.segmentWater ?? 0
+                                    cumWater = row.cumulativeWater ?? 0
+                                  }
+                                  const tStart = isNewFmt ? cumSec : (row.startTime ?? 0)
+                                  if (isNewFmt) cumSec += Math.max(0, Number(row.intervalSec) || 0)
+                                  const intervalSec = isNewFmt ? Math.max(0, Number(row.intervalSec) || 0) : ((row.time ?? 0) - tStart)
+                                  return (
+                                    <tr key={ri} className="text-center text-stone-700">
+                                      <td className="px-1.5 py-1 tabular-nums">{tStart}</td>
+                                      <td className="px-1.5 py-1 tabular-nums">{intervalSec}</td>
+                                      <td className="px-1.5 py-1 tabular-nums">{segWater}</td>
+                                      <td className="px-1.5 py-1 tabular-nums">{cumWater}</td>
+                                      <td className="px-1.5 py-1 tabular-nums">{row.temp}°</td>
+                                      <td className="px-1.5 py-1 text-left text-pour-800">{row.technique || '—'}</td>
+                                    </tr>
+                                  )
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )
+                      })() : null}
                     </div>
                   ) : null}
                 </li>
@@ -1541,37 +1653,12 @@ function PourOverTab() {
         )}
       </section>
 
-      {/* 問題導向調整指南 */}
-      <section>
-        <h2 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-stone-500">問題導向指南</h2>
-        <div className="grid gap-1.5">
-          {Object.entries(TROUBLESHOOTING_OPTIONS).map(([key, { title }]) => (
-            <button key={key} type="button"
-              onClick={() => setTroubleKey(troubleKey === key ? null : key)}
-              className={`rounded-lg border py-2 px-3 text-left text-xs font-medium transition ${
-                troubleKey === key ? 'border-pour-500 bg-pour-100 text-pour-800' : 'border-stone-200 bg-white text-stone-700 active:bg-stone-50'
-              }`}>
-              {title}
-            </button>
-          ))}
-        </div>
-        {troubleKey && TROUBLESHOOTING_OPTIONS[troubleKey] && (
-          <div className="mt-2 rounded-xl bg-white p-2.5 shadow-sm">
-            <h3 className="mb-1 text-sm font-semibold text-stone-800">{TROUBLESHOOTING_OPTIONS[troubleKey].title}</h3>
-            <p className="mb-2 text-xs text-stone-600">診斷：{TROUBLESHOOTING_OPTIONS[troubleKey].diagnosis}</p>
-            <div className="space-y-1.5">
-              {TROUBLESHOOTING_OPTIONS[troubleKey].tips.map((t, i) => (
-                <div key={i}><span className="text-[10px] font-semibold text-pour-600">{t.category}</span><p className="text-xs text-stone-700">{t.text}</p></div>
-              ))}
-            </div>
-          </div>
-        )}
-      </section>
 
       {/* 記錄本次沖煮 Modal */}
       {showBrewTimer && (
         <BrewTimerModal
           steps={planStepsForChart}
+          totalWater={totalWater}
           onClose={() => setShowBrewTimer(false)}
           onLogBrew={() => {
             setShowBrewTimer(false)
@@ -1589,11 +1676,10 @@ function PourOverTab() {
 
             {/* 實際數據微調 */}
             <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-stone-400">實際使用數據</p>
-            <div className="mb-3 grid grid-cols-4 gap-2 text-[13px]">
+            <div className="mb-3 grid grid-cols-3 gap-2 text-[13px]">
               {[
                 { key: 'cw', placeholder: '粉重 g' },
                 { key: 'wr', placeholder: '粉水比' },
-                { key: 'wt', placeholder: '水溫 °C' },
                 { key: 'gs', placeholder: '研磨' },
               ].map(({ key, placeholder }) => (
                 <input key={key} type="text" inputMode="decimal" autoComplete="off"
@@ -1730,128 +1816,12 @@ function PourOverTab() {
         </section>
       )}
 
-      {/* 風味微調速查 */}
-      <section>
-        <h2 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-stone-500">風味速查</h2>
-        <div className="grid grid-cols-2 gap-1.5">
-          {Object.entries(FLAVOR_TIPS).map(([key, { title }]) => (
-            <button key={key} type="button"
-              onClick={() => setFlavorIssue(flavorIssue === key ? null : key)}
-              className={`rounded-lg border py-2 px-2 text-center text-xs font-medium transition ${
-                flavorIssue === key ? 'border-pour-500 bg-pour-100 text-pour-800' : 'border-stone-200 bg-white text-stone-700 active:bg-stone-50'
-              }`}>
-              {title}
-            </button>
-          ))}
-        </div>
-        {flavorIssue && FLAVOR_TIPS[flavorIssue] && (
-          <div className="mt-2 rounded-xl bg-white p-2.5 shadow-sm">
-            <h3 className="mb-1.5 text-sm font-semibold text-stone-800">{FLAVOR_TIPS[flavorIssue].title}</h3>
-            <ol className="list-decimal space-y-1 pl-4 text-xs text-stone-700">{FLAVOR_TIPS[flavorIssue].tips.map((tip, i) => <li key={i}>{tip}</li>)}</ol>
-          </div>
-        )}
-      </section>
-
-      {/* 手法風味預測面板 (Flavor Equalizer) */}
-      <section className="rounded-xl border border-stone-200 bg-white p-3 shadow-sm">
-        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-stone-500">手法對風味影響</h2>
-        <div className="mb-3 flex flex-wrap gap-2">
-          {FLAVOR_EQUALIZER_TECHNIQUES.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setActiveTechnique(activeTechnique === t.id ? null : t.id)}
-              className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
-                activeTechnique === t.id ? 'border-pour-500 bg-pour-100 text-pour-800' : 'border-stone-200 bg-stone-50 text-stone-700 hover:bg-stone-100'
-              }`}
-            >
-              {t.name}
-            </button>
-          ))}
-        </div>
-        <div className="space-y-2">
-          {flavorKeys.map(({ key, label }) => {
-            const base = baseFlavor[key]
-            const mod = activeTechnique ? FLAVOR_EQUALIZER_TECHNIQUES.find(x => x.id === activeTechnique)?.mod[key] ?? 0 : 0
-            const basePct = (base / 10) * 100
-            const modPct = (Math.abs(mod) / 10) * 100
-            const grayPct = mod < 0 ? ((base + mod) / 10) * 100 : basePct
-            return (
-              <div key={key} className="flex items-center gap-2">
-                <span className="w-14 shrink-0 text-xs text-stone-600">{label}</span>
-                <div className="flex-1 flex h-6 items-center rounded overflow-hidden bg-stone-100">
-                  <div className="h-full bg-stone-400 shrink-0 transition-[width] duration-200" style={{ width: `${grayPct}%` }} />
-                  {mod > 0 && (
-                    <div className="h-full bg-green-500 shrink-0 flex items-center justify-end pr-1 text-[10px] font-bold text-white transition-[width] duration-200" style={{ width: `${modPct}%` }}>
-                      +{mod}
-                    </div>
-                  )}
-                  {mod < 0 && (
-                    <div className="h-full bg-red-500 shrink-0 flex items-center justify-end pr-1 text-[10px] font-bold text-white transition-[width] duration-200" style={{ width: `${modPct}%` }}>
-                      -{Math.abs(mod)}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </section>
-
-      {/* 沖煮技巧加成（單一技巧選擇） */}
-      {normalizedTechniques.length > 0 && (
-        <section className="rounded-xl border border-stone-200 bg-white p-3 shadow-sm">
-          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-stone-500">沖煮技巧加成</h2>
-          <div className="mb-3 flex flex-wrap gap-2">
-            {normalizedTechniques.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setSelectedTechForChart(selectedTechForChart === t.id ? null : t.id)}
-                className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
-                  (selectedTechForChart === t.id) || (!selectedTechForChart && activeTechniqueBoost?.id === t.id)
-                    ? 'border-pour-500 bg-pour-100 text-pour-800'
-                    : 'border-stone-200 bg-stone-50 text-stone-700 hover:bg-stone-100'
-                }`}
-              >
-                {t.name}
-              </button>
-            ))}
-          </div>
-          <div className="space-y-2">
-            {techniqueScoreKeys.map(({ key, label }) => {
-              const mod = activeTechniqueBoost ? asNumberOr(activeTechniqueBoost[key], 0) : 0
-              const basePct = 50
-              const modPct = (Math.abs(mod) / 5) * 50
-              const grayPct = mod < 0 ? Math.max(0, basePct - modPct) : basePct
-              return (
-                <div key={key} className="flex items-center gap-2">
-                  <span className="w-14 shrink-0 text-xs text-stone-600">{label}</span>
-                  <div className="flex-1 flex h-6 items-center rounded overflow-hidden bg-stone-100">
-                    <div className="h-full bg-stone-400 shrink-0 transition-[width] duration-200" style={{ width: `${grayPct}%` }} />
-                    {mod > 0 && (
-                      <div className="h-full bg-green-500 shrink-0 flex items-center justify-end pr-1 text-[10px] font-bold text-white transition-[width] duration-200" style={{ width: `${modPct}%` }}>
-                        +{mod}
-                      </div>
-                    )}
-                    {mod < 0 && (
-                      <div className="h-full bg-red-500 shrink-0 flex items-center justify-end pr-1 text-[10px] font-bold text-white transition-[width] duration-200" style={{ width: `${modPct}%` }}>
-                        {mod}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </section>
-      )}
     </div>
   )
 }
 
 // ─── 沖煮計時器 ──────────────────────────────────────────────────────────────
-function BrewTimerModal({ steps, onClose, onLogBrew }) {
+function BrewTimerModal({ steps, totalWater = 0, onClose, onLogBrew }) {
   const [elapsed, setElapsed] = useState(0)
   const [running, setRunning] = useState(false)
   const alertedRef  = useRef(new Set())
@@ -1932,7 +1902,22 @@ function BrewTimerModal({ steps, onClose, onLogBrew }) {
             <button type="button" onClick={onClose} className="text-pour-300 hover:text-white text-xl leading-none" aria-label="關閉">×</button>
           </div>
           <div className="text-5xl font-bold tabular-nums text-center tracking-tight">{fmt(elapsed)}</div>
-          <div className="mt-3 h-1.5 rounded-full bg-pour-500/60 overflow-hidden">
+          {/* 下一步技巧提示 */}
+          {(() => {
+            const nextStep = !done ? stepTimings[currentIdx + 1] : null
+            return (
+              <div className="mt-1.5 text-center text-lg text-pour-200 h-7">
+                {nextStep
+                  ? <>
+                      <span className="tabular-nums text-pour-300">{fmt(nextStep.startTime)}</span>
+                      <span className="mx-2 text-pour-400">→</span>
+                      <span className="font-semibold text-pour-100">{nextStep.technique || '—'}</span>
+                    </>
+                  : done ? <span className="text-pour-100 font-semibold">沖煮完成</span> : null}
+              </div>
+            )
+          })()}
+          <div className="mt-2 h-1.5 rounded-full bg-pour-500/60 overflow-hidden">
             <div className="h-full bg-white rounded-full transition-all duration-1000" style={{ width: `${progressPct}%` }} />
           </div>
         </div>
@@ -1940,9 +1925,10 @@ function BrewTimerModal({ steps, onClose, onLogBrew }) {
         {/* 步驟列表 */}
         <div className="max-h-52 overflow-y-auto divide-y divide-stone-100">
           {stepTimings.map((step, i) => {
-            const isActive = !done && i === currentIdx
-            const isPast   = elapsed >= step.endTime
-            const cumWater = stepTimings.slice(0, i + 1).reduce((s, x) => s + (Number(x.addWaterMl) || 0), 0)
+            const isActive  = !done && i === currentIdx
+            const isPast    = elapsed >= step.endTime
+            const segWater  = resolveStepWater(step, totalWater)
+            const cumWater  = stepTimings.slice(0, i + 1).reduce((s, x) => s + resolveStepWater(x, totalWater), 0)
             return (
               <div key={i} className={`flex items-center gap-2.5 px-4 py-2 transition ${isActive ? 'bg-pour-50' : ''}`}>
                 <span className={`h-5 w-5 shrink-0 rounded-full flex items-center justify-center text-[10px] font-bold
@@ -1950,8 +1936,8 @@ function BrewTimerModal({ steps, onClose, onLogBrew }) {
                 <span className={`text-xs flex-1 ${isActive ? 'font-semibold text-pour-800' : isPast ? 'text-stone-400 line-through' : 'text-stone-600'}`}>
                   {step.technique || '—'}
                 </span>
-                <span className="text-[11px] tabular-nums text-stone-500">＋{Number(step.addWaterMl) || 0} → {cumWater} ml</span>
-                <span className={`text-[10px] tabular-nums w-9 text-right shrink-0 ${isActive ? 'text-pour-600 font-semibold' : 'text-stone-400'}`}>{fmt(step.startTime)}</span>
+                <span className="text-[11px] tabular-nums text-stone-500">＋{segWater} → {cumWater} ml</span>
+                <span className={`text-[10px] tabular-nums w-9 text-right shrink-0 ${isActive ? 'text-pour-600 font-semibold' : 'text-stone-400'}`}>{fmt(step.endTime)}</span>
               </div>
             )
           })}
