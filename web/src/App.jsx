@@ -1,4 +1,117 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback, createContext, useContext } from 'react'
+
+// ─── 語言系統 ─────────────────────────────────────────────────────────────────
+const TRANSLATIONS = {
+  zh: {
+    appTitle: '咖啡萃取與風味調整',
+    tabEspresso: '義式濃縮', tabPour: '手沖咖啡',
+    edit: '編輯', done: '完成', add: '新增', delete: '刪除',
+    save: '儲存', cancel: '取消', confirm: '確定',
+    // Espresso
+    espressoLabel: '義式濃縮', productLabel: '產品',
+    addConfig: '新增配置', addProduct: '新增品項',
+    ratioLabel: '濃度比例', milkRatioLabel: (extra) => `濃縮與${extra || '牛奶'}的比例`,
+    targetYield: '目標萃取量', waterDispense: '機器出水量',
+    singleShot: '單杯萃取', doubleShot: '雙杯萃取', mlUnit: '毫升',
+    grindLabel: '研磨 1→10', tampLabel: '壓粉(公斤)', absorptionLabel: '吸水率',
+    brewTimeLabel: '出水秒數', brewTimeTarget: '目標 25～30 秒',
+    tooFast: '(偏快)', tooSlow: '(偏慢)',
+    configNamePlaceholder: '配置名稱', ratioSelectLabel: '粉液比',
+    summaryGrind: '研磨', summaryDose: '粉重', summaryTamp: '壓粉',
+    // Pour
+    beanLabel: '豆子', methodLabel: '手法',
+    noBeanInfo: '尚未填寫豆子資訊',
+    originLabel: '產地', varietyLabel: '品種', processLabel: '加工', roastLabel: '焙度',
+    flavorNoteLabel: '風味特色',
+    techniqueLabel: '沖煮技巧', techniqueItem: '技巧',
+    newTechniqueOpt: '— 新技巧 —',
+    extractionLabel: '萃取', flowLabel: '水流', bedLabel: '粉層', otherLabel: '其他',
+    techniqueNamePlaceholder: '例：畫圈、中心注水',
+    startBrew: '▶ 開始沖煮', addLog: '＋ 記錄',
+    historyLabel: '紀錄', allBeans: '全部豆子',
+    brewPlanLabel: '沖煮計畫',
+    // Timer
+    timerTitle: '沖煮計時',
+    nextStepLabel: '下一步',
+    brewComplete: '沖煮完成',
+    resetBtn: '重置', restartBtn: '重新開始',
+    startBtn: '開始', pauseBtn: '暫停', resumeBtn: '繼續',
+    logBrewBtn: '記錄此次沖煮',
+    // Log modal
+    logTitle: '記錄本次沖煮',
+    logActualData: '實際使用數據',
+    logExecution: '執行完美度（1–10）',
+    logFlavor: '風味結果分數（1–10）',
+    scoreExecution: '執行', scoreFlavor: '風味',
+    logPros: '優點 / 亮點', logCons: '缺點 / 待改進',
+    logDirection: '後續修改方向',
+    logSave: '儲存紀錄',
+  },
+  en: {
+    appTitle: 'Coffee Extraction',
+    tabEspresso: 'Espresso', tabPour: 'Pour Over',
+    edit: 'Edit', done: 'Done', add: 'Add', delete: 'Delete',
+    save: 'Save', cancel: 'Cancel', confirm: 'OK',
+    // Espresso
+    espressoLabel: 'Espresso', productLabel: 'Drink',
+    addConfig: 'New Config', addProduct: 'New Drink',
+    ratioLabel: 'Ratio', milkRatioLabel: (extra) => `Espresso : ${extra || 'Milk'}`,
+    targetYield: 'Target Yield', waterDispense: 'Water In',
+    singleShot: 'Single', doubleShot: 'Double', mlUnit: 'ml',
+    grindLabel: 'Grind 1→10', tampLabel: 'Tamp (kg)', absorptionLabel: 'Absorption',
+    brewTimeLabel: 'Brew Time', brewTimeTarget: 'Target 25–30s',
+    tooFast: '(fast)', tooSlow: '(slow)',
+    configNamePlaceholder: 'Config name', ratioSelectLabel: 'Ratio',
+    summaryGrind: 'Grind', summaryDose: 'Dose', summaryTamp: 'Tamp',
+    // Pour
+    beanLabel: 'Bean', methodLabel: 'Method',
+    noBeanInfo: 'No bean info yet',
+    originLabel: 'Origin', varietyLabel: 'Variety', processLabel: 'Process', roastLabel: 'Roast',
+    flavorNoteLabel: 'Flavor',
+    techniqueLabel: 'Techniques', techniqueItem: 'Technique',
+    newTechniqueOpt: '— New —',
+    extractionLabel: 'Extraction', flowLabel: 'Flow', bedLabel: 'Bed', otherLabel: 'Other',
+    techniqueNamePlaceholder: 'e.g. Circle pour, Center pour',
+    startBrew: '▶ Brew', addLog: '＋ Log',
+    historyLabel: 'History', allBeans: 'All Beans',
+    brewPlanLabel: 'Brew Plan',
+    // Timer
+    timerTitle: 'Brew Timer',
+    nextStepLabel: 'Next',
+    brewComplete: 'Done!',
+    resetBtn: 'Reset', restartBtn: 'Restart',
+    startBtn: 'Start', pauseBtn: 'Pause', resumeBtn: 'Resume',
+    logBrewBtn: 'Log Brew',
+    // Log modal
+    logTitle: 'Log This Brew',
+    logActualData: 'Actual Parameters',
+    logExecution: 'Execution Score (1–10)',
+    logFlavor: 'Flavor Score (1–10)',
+    scoreExecution: 'Exec', scoreFlavor: 'Flavor',
+    logPros: 'Pros / Highlights', logCons: 'Cons / Issues',
+    logDirection: 'Next Steps',
+    logSave: 'Save Log',
+  },
+}
+const LangContext = createContext('zh')
+function useLang() {
+  const lang = useContext(LangContext)
+  const t = (key, ...args) => {
+    const val = TRANSLATIONS[lang]?.[key] ?? TRANSLATIONS.zh[key] ?? key
+    return typeof val === 'function' ? val(...args) : val
+  }
+  return { lang, t }
+}
+
+// 義式濃縮比例預設（固定三種）
+const ESPRESSO_RATIO_PRESETS = [
+  { ratio: 1, name: 'Ristretto', desc: '1:1' },
+  { ratio: 2, name: 'Espresso',  desc: '1:2' },
+  { ratio: 3, name: 'Lungo',     desc: '1:3' },
+]
+function espressoRatioName(ratio) {
+  return ESPRESSO_RATIO_PRESETS.find(p => p.ratio === ratio)?.name ?? `1:${ratio}`
+}
 
 const PARAM_CARD_MIN_H = 'min-h-[4.5rem]'
 
@@ -93,23 +206,20 @@ function Slider({ label, value, min, max, step, unit, onChange }) {
 
 // 義式濃縮粉:水 = 1:(1~3，小數一位)
 
-// ——— 義式濃縮（無預設配方，全部自訂）———
+// ——— 義式濃縮（固定三種比例：Ristretto/Espresso/Lungo）———
 function EspressoTab() {
+  const { t } = useLang()
   const [cupMode, setCupMode] = useState('double')   // single | double
   const [dose, setDose] = useState(18)
-  const [yieldRatio, setYieldRatio] = useState(2.5)
-  const [absorptionRate, setAbsorptionRate] = useState(2)
+  const [selectedRatio, setSelectedRatio] = useLocalStorageState('coffee.espresso.selectedRatio', 2)
+  const [absorptionRate, setAbsorptionRate] = useState(1)
   const [grindSize, setGrindSize] = useState(5)
   const [brewTime, setBrewTime] = useState(28)
+  const [brewTimeInput, setBrewTimeInput] = useState('28')
   const [tampPressure, setTampPressure] = useState(20)
   const [drinkId, setDrinkId] = useLocalStorageState('coffee.espresso.drinkId', '')
   const [customDrinks, setCustomDrinks] = useLocalStorageState('coffee.espresso.customDrinks', [])
-  const [showAddDrink, setShowAddDrink] = useState(false)
   const [editingDrink, setEditingDrink] = useState(null)
-  const [espressoConfigs, setEspressoConfigs] = useLocalStorageState('coffee.espresso.espressoConfigs', [])
-  const [selectedConfigId, setSelectedConfigId] = useLocalStorageState('coffee.espresso.selectedConfigId', '')
-  const [showAddConfig, setShowAddConfig] = useState(false)
-  const [editingConfig, setEditingConfig] = useState(null)
   const [showEditPopover, setShowEditPopover] = useState(false)
   const [targetVolumeMl, setTargetVolumeMl] = useState(null)
 
@@ -121,19 +231,15 @@ function EspressoTab() {
 
   const allDrinks = customDrinks
   const currentDrink = allDrinks.find(d => d.id === drinkId) || allDrinks[0] || null
-  const selectedConfig = espressoConfigs.find(c => c.id === selectedConfigId) || espressoConfigs[0] || null
-  // 濃縮粉液比一律跟隨左上方「義式濃縮」下拉目前選項，品項不綁定濃縮設定
-  const effectiveRatio = selectedConfig?.yieldRatio ?? yieldRatio
+  // 比例固定為三種預設
+  const effectiveRatio = ESPRESSO_RATIO_PRESETS.some(p => p.ratio === selectedRatio) ? selectedRatio : 2
 
   // 修正 localStorage 可能造成的「已刪除但仍保留在選單的 id」
   useEffect(() => {
-    if (selectedConfigId && !espressoConfigs.some(c => c.id === selectedConfigId)) {
-      setSelectedConfigId(espressoConfigs[0]?.id ?? '')
-    }
     if (drinkId && !customDrinks.some(d => d.id === drinkId)) {
       setDrinkId(customDrinks[0]?.id ?? '')
     }
-  }, [espressoConfigs, customDrinks, selectedConfigId, drinkId])
+  }, [customDrinks, drinkId])
 
   const hasMilk = currentDrink?.milkParts != null
   const totalParts = hasMilk ? 1 + currentDrink.milkParts : 1
@@ -171,7 +277,6 @@ function EspressoTab() {
       setCustomDrinks(prev => [...prev, newDrink])
       setDrinkId(newDrink.id)
     }
-    setShowAddDrink(false)
   }
 
   const handleDeleteDrink = (id) => {
@@ -182,86 +287,55 @@ function EspressoTab() {
     }
   }
 
-  const handleSaveConfig = (saved) => {
-    if (saved.id) {
-      setEspressoConfigs(prev => prev.map(c => c.id === saved.id ? saved : c))
-    } else {
-      const newConfig = { ...saved, id: 'config-' + Date.now() }
-      setEspressoConfigs(prev => [...prev, newConfig])
-      setSelectedConfigId(newConfig.id)
-    }
-    setShowAddConfig(false)
-    setEditingConfig(null)
-  }
-  const handleDeleteConfig = (id) => {
-    const nextConfigs = espressoConfigs.filter(c => c.id !== id)
-    setEspressoConfigs(nextConfigs)
-    if (selectedConfigId === id) setSelectedConfigId(nextConfigs[0]?.id ?? '')
-  }
-
   const hints = {}
   if (tooFast) {
+    // 偏快 → 需要磨細（數字↑）、加大壓粉
     hints.dose = '↓'
-    hints.grind = '↓'
+    hints.grind = '↑'
     hints.tamp = '↑'
     hints.yieldRatio = '↑'
   } else if (tooSlow) {
+    // 偏慢 → 需要磨粗（數字↓）、減小壓粉
     hints.dose = '↑'
-    hints.grind = '↑'
+    hints.grind = '↓'
     hints.tamp = '↓'
     hints.yieldRatio = '↓'
   }
 
   return (
     <div className="space-y-3 pb-24">
-      {/* 第一排：義式濃縮 義式濃縮下拉 產品 產品下拉 編輯icon（縮小）；點擊在咖啡色區塊上方展開/收合編輯區 */}
+      {/* 第一排：義式濃縮比例下拉 + 產品下拉 + 編輯按鈕 */}
       <section className="flex items-center gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wider text-stone-500 shrink-0">義式濃縮</span>
-        <select value={selectedConfigId} onChange={(e) => setSelectedConfigId(e.target.value)} className="flex-1 min-w-0 rounded-lg border border-stone-200 bg-white py-2 pl-2 pr-7 text-sm font-medium text-stone-800 focus:border-espresso-500 focus:outline-none">
-          <option value="">— 請新增配置 —</option>
-          {espressoConfigs.map(c => (
-            <option key={c.id} value={c.id}>{c.name}（1:{c.yieldRatio}）</option>
+        <span className="text-xs font-semibold uppercase tracking-wider text-stone-500 shrink-0">{t('espressoLabel')}</span>
+        <select
+          value={selectedRatio}
+          onChange={(e) => setSelectedRatio(Number(e.target.value))}
+          className="flex-1 min-w-0 rounded-lg border border-stone-200 bg-white py-2 pl-2 pr-7 text-sm font-medium text-stone-800 focus:border-espresso-500 focus:outline-none"
+        >
+          {ESPRESSO_RATIO_PRESETS.map(p => (
+            <option key={p.ratio} value={p.ratio}>{p.name} ({p.desc})</option>
           ))}
         </select>
-        <span className="text-xs font-semibold uppercase tracking-wider text-stone-500 shrink-0">產品</span>
+        <span className="text-xs font-semibold uppercase tracking-wider text-stone-500 shrink-0">{t('productLabel')}</span>
         <select value={drinkId} onChange={(e) => setDrinkId(e.target.value)} className="flex-1 min-w-0 rounded-lg border border-stone-200 bg-white py-2 pl-2 pr-7 text-sm font-medium text-stone-800 focus:border-espresso-500 focus:outline-none">
-          <option value="">— 請新增品項 —</option>
+          <option value="">— {t('addProduct')} —</option>
           {allDrinks.map(d => (
             <option key={d.id} value={d.id}>{d.name}</option>
           ))}
         </select>
-        <button type="button" onClick={() => { const opening = !showEditPopover; setShowEditPopover(s => !s); if (opening) { setEditingConfig(selectedConfig); setEditingDrink(currentDrink) } }} className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-stone-500 text-white" aria-label="編輯濃縮與產品">
+        <button type="button" onClick={() => { setShowEditPopover(s => !s); if (!showEditPopover) setEditingDrink(currentDrink) }} className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-stone-500 text-white" aria-label="編輯產品">
           <EditIcon className="h-3 w-3" />
         </button>
       </section>
 
-      {/* 編輯區：點編輯 icon 直接開此畫面；義式濃縮/產品右側下拉，選後下方表單帶入 */}
+      {/* 編輯區：僅管理產品（飲品） */}
       {showEditPopover && (
         <section className="rounded-xl border border-stone-200 bg-white py-3 shadow-sm">
           <div className="px-3">
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs font-semibold text-stone-500 shrink-0">義式濃縮</span>
-              <select value={editingConfig?.id ?? ''} onChange={(e) => { const v = e.target.value; setEditingConfig(v ? espressoConfigs.find(c => c.id === v) ?? null : null) }} className="flex-1 min-w-0 rounded border border-stone-200 px-2 py-1.5 text-sm text-stone-800">
-                <option value="">新增配置</option>
-                {espressoConfigs.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}（1:{c.yieldRatio}）</option>
-                ))}
-              </select>
-              {editingConfig && (
-                <button type="button" onClick={() => { handleDeleteConfig(editingConfig.id); setEditingConfig(espressoConfigs.find(c => c.id !== editingConfig.id) ?? null) }} className="shrink-0 rounded px-2 py-1.5 text-xs text-white bg-red-600">刪除</button>
-              )}
-            </div>
-            <EspressoConfigForm
-              key={editingConfig?.id ?? 'new-config'}
-              config={editingConfig ?? null}
-              onSave={(saved) => { handleSaveConfig(saved); setEditingConfig(undefined) }}
-              onCancel={() => { setEditingConfig(undefined) }}
-              onDelete={editingConfig ? () => { handleDeleteConfig(editingConfig.id); setEditingConfig(undefined) } : undefined}
-            />
-            <div className="flex items-center gap-2 mt-3 mb-1">
-              <span className="text-xs font-semibold text-stone-500 shrink-0">產品</span>
+              <span className="text-xs font-semibold text-stone-500 shrink-0">{t('productLabel')}</span>
               <select value={editingDrink?.id ?? ''} onChange={(e) => { const v = e.target.value; setEditingDrink(v ? allDrinks.find(d => d.id === v) ?? null : null) }} className="flex-1 min-w-0 rounded border border-stone-200 px-2 py-1.5 text-sm text-stone-800">
-                <option value="">新增品項</option>
+                <option value="">{t('addProduct')}</option>
                 {allDrinks.map(d => (
                   <option key={d.id} value={d.id}>{d.name}</option>
                 ))}
@@ -280,46 +354,73 @@ function EspressoTab() {
 
       <div className="flex gap-2 items-center py-2">
         <div className="flex-1 min-w-0 flex items-center gap-2">
-          <input type="text" inputMode="numeric" placeholder="單杯毫升" value={targetVolumeMl ?? ''} onChange={(e) => { const raw = e.target.value; if (raw === '') { setTargetVolumeMl(null); return }; const n = Number(raw); if (!Number.isNaN(n)) setTargetVolumeMl(n) }} className="w-full rounded border border-stone-200 px-2 py-1.5 text-sm text-right tabular-nums" />
-          <span className="text-sm text-stone-500 shrink-0">毫升</span>
+          <input type="text" inputMode="numeric" placeholder={t('mlUnit')} value={targetVolumeMl ?? ''} onChange={(e) => { const raw = e.target.value; if (raw === '') { setTargetVolumeMl(null); return }; const n = Number(raw); if (!Number.isNaN(n)) setTargetVolumeMl(n) }} className="w-full rounded border border-stone-200 px-2 py-1.5 text-sm text-right tabular-nums" />
+          <span className="text-sm text-stone-500 shrink-0">{t('mlUnit')}</span>
         </div>
         <div className="flex-1 min-w-0 flex gap-2">
-          <button type="button" onClick={() => { setCupMode('single'); setDose(d => (d > 12 ? 10 : d)) }} className={`flex-1 rounded-lg py-2 text-sm font-medium ${cupMode === 'single' ? 'bg-espresso-600 text-white' : 'bg-stone-200 text-stone-600'}`}>單杯萃取</button>
-          <button type="button" onClick={() => { setCupMode('double'); setDose(d => (d < 14 ? 18 : d)) }} className={`flex-1 rounded-lg py-2 text-sm font-medium ${cupMode === 'double' ? 'bg-espresso-600 text-white' : 'bg-stone-200 text-stone-600'}`}>雙杯萃取</button>
+          <button type="button" onClick={() => { setCupMode('single'); setDose(d => (d > 12 ? 10 : d)) }} className={`flex-1 rounded-lg py-2 text-sm font-medium ${cupMode === 'single' ? 'bg-espresso-600 text-white' : 'bg-stone-200 text-stone-600'}`}>{t('singleShot')}</button>
+          <button type="button" onClick={() => { setCupMode('double'); setDose(d => (d < 14 ? 18 : d)) }} className={`flex-1 rounded-lg py-2 text-sm font-medium ${cupMode === 'double' ? 'bg-espresso-600 text-white' : 'bg-stone-200 text-stone-600'}`}>{t('doubleShot')}</button>
         </div>
       </div>
       <section className="rounded-xl border border-stone-200 bg-espresso-800 p-3 text-white shadow">
         <div className="flex">
           <div className="flex-1 min-w-0 space-y-2 text-base pr-3">
-            <div className="flex justify-between"><span className="text-espresso-200">濃度比例</span><span className="tabular-nums">1 : {effectiveRatio}</span></div>
+            <div className="flex justify-between"><span className="text-espresso-200">{t('ratioLabel')}</span><span className="tabular-nums">{espressoRatioName(effectiveRatio)} 1:{effectiveRatio}</span></div>
             {currentDrink?.milkParts != null && (
-              <div className="flex justify-between"><span className="text-espresso-200">濃縮與{currentDrink.extraLabel || '牛奶'}的比例</span><span className="tabular-nums">1 : {currentDrink.milkParts}</span></div>
+              <div className="flex justify-between">
+                <span className="text-espresso-200">{t('milkRatioLabel', currentDrink.extraLabel)}</span>
+                <span className="tabular-nums">
+                  1 : {currentDrink.milkParts}
+                  <span className="ml-1 text-espresso-300 text-sm">
+                    ({Math.round(effectiveYield * currentDrink.milkParts)} ml)
+                  </span>
+                </span>
+              </div>
             )}
           </div>
           <div className="shrink-0 w-px self-stretch bg-espresso-600" aria-hidden />
           <div className="flex-1 min-w-0 space-y-2 text-base pl-3">
-            <div className="flex justify-between"><span className="text-espresso-200">目標萃取量</span><span className="font-bold tabular-nums">{effectiveYield} ml</span></div>
-            <div className="flex justify-between"><span className="text-espresso-200">機器出水量</span><span className="font-bold tabular-nums">{waterToDispense} ml</span></div>
+            <div className="flex justify-between"><span className="text-espresso-200">{t('targetYield')}</span><span className="font-bold tabular-nums">{effectiveYield} ml</span></div>
+            <div className="flex justify-between"><span className="text-espresso-200">{t('waterDispense')}</span><span className="font-bold tabular-nums">{waterToDispense} ml</span></div>
           </div>
         </div>
         <div className="mt-3 border-t border-espresso-600 pt-2 text-center text-sm text-espresso-200">
-          研磨{grindSize} · 粉重{dose}g (1:{effectiveRatio}) · {brewTime}s · 壓粉{tampPressure}kg
+          {t('summaryGrind')} {grindSize} · {t('summaryDose')} {dose}g ({espressoRatioName(effectiveRatio)} 1:{effectiveRatio}) · {brewTime}s · {t('summaryTamp')} {tampPressure}kg
         </div>
       </section>
 
       {/* 研磨、壓粉、吸水率、出水秒數（粉重資訊移到咖啡色區塊） */}
       <section>
         <div className="grid grid-cols-2 gap-2">
-          <SliderWithHint label="研磨 1→10" value={grindSize} min={1} max={10} step={1} unit="" onChange={setGrindSize} hint={hints.grind} />
-          <SliderWithHint label="壓粉(公斤)" value={tampPressure} min={12} max={35} step={1} unit=" kg" onChange={setTampPressure} hint={hints.tamp} />
-          <Slider label="吸水率" value={absorptionRate} min={1} max={4} step={0.1} unit="" onChange={setAbsorptionRate} />
+          <SliderWithHint label={t('grindLabel')} value={grindSize} min={1} max={10} step={1} unit="" onChange={setGrindSize} hint={hints.grind} />
+          <SliderWithHint label={t('tampLabel')} value={tampPressure} min={12} max={35} step={1} unit=" kg" onChange={setTampPressure} hint={hints.tamp} />
+          <Slider label={t('absorptionLabel')} value={absorptionRate} min={1} max={4} step={0.1} unit="" onChange={setAbsorptionRate} />
           <div className={`rounded-xl bg-white p-2.5 shadow-sm ${PARAM_CARD_MIN_H}`}>
-            <div className="mb-1 flex justify-between">
-              <span className="text-xs font-medium text-stone-500">出水秒數</span>
-              <span className={`text-sm font-bold tabular-nums ${!brewTimeOk ? 'text-amber-600' : ''}`}>{brewTime}s {!brewTimeOk && (tooFast ? '(偏快)' : '(偏慢)')}</span>
+            <div className="mb-1 flex flex-wrap justify-between gap-x-1 gap-y-0">
+              <span className="text-xs font-medium text-stone-500">{t('brewTimeLabel')}</span>
+              <span className={`text-sm font-bold tabular-nums ${!brewTimeOk ? 'text-amber-600' : ''}`}>
+                {brewTime}s{!brewTimeOk && <span className="ml-0.5 text-xs font-normal">{tooFast ? t('tooFast') : t('tooSlow')}</span>}
+              </span>
             </div>
-            <input type="text" inputMode="numeric" value={brewTime} onChange={(e) => { const raw = e.target.value; if (raw === '' || Number.isNaN(Number(raw))) { setBrewTime(25); return }; setBrewTime(Number(raw)) }} className="w-full rounded border border-stone-200 py-1.5 px-2 text-center text-sm tabular-nums" />
-            <p className="mt-0.5 text-[10px] text-stone-500">目標 25～30 秒</p>
+            <input
+              type="text" inputMode="numeric"
+              value={brewTimeInput}
+              onChange={(e) => {
+                const raw = e.target.value
+                setBrewTimeInput(raw)
+                const n = Number(raw)
+                if (raw !== '' && !Number.isNaN(n)) setBrewTime(n)
+              }}
+              onBlur={() => {
+                const n = Number(brewTimeInput)
+                const valid = brewTimeInput !== '' && !Number.isNaN(n)
+                const final = valid ? n : 28
+                setBrewTime(final)
+                setBrewTimeInput(String(final))
+              }}
+              className="w-full rounded border border-stone-200 py-1.5 px-2 text-center text-sm tabular-nums"
+            />
+            <p className="mt-0.5 text-[10px] text-stone-500">{t('brewTimeTarget')}</p>
           </div>
         </div>
       </section>
@@ -364,28 +465,44 @@ function SliderWithHint({ label, value, min, max, step, unit, onChange, hint }) 
 
 // 義式配置表單：名稱與比例左右對稱，無外層泡泡
 function EspressoConfigForm({ config, onSave, onCancel, onDelete }) {
+  const { t } = useLang()
   const [name, setName] = useState(config?.name || '')
-  const [yieldRatio, setYieldRatio] = useState(config?.yieldRatio ?? 2.5)
-  const clamp = (v) => Math.min(5, Math.max(0, Math.round(v * 10) / 10))
+  const [yieldRatio, setYieldRatio] = useState(() => {
+    const r = config?.yieldRatio ?? 2
+    return ESPRESSO_RATIO_PRESETS.some(p => p.ratio === r) ? r : 2
+  })
   useEffect(() => {
     setName(config?.name || '')
-    setYieldRatio(config?.yieldRatio ?? 2.5)
+    const r = config?.yieldRatio ?? 2
+    setYieldRatio(ESPRESSO_RATIO_PRESETS.some(p => p.ratio === r) ? r : 2)
   }, [config?.id])
   return (
     <div className="mt-1">
-      <div className="flex gap-2 items-center mb-2">
-        <div className="flex-1 min-w-0">
-          <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="名稱（如 1:2.5 標準）" className="w-full rounded border border-stone-200 px-2 py-1.5 text-sm" />
-        </div>
-        <div className="flex-1 min-w-0 flex items-center gap-1.5">
-          <span className="text-xs text-stone-600 shrink-0">粉液比 1:</span>
-          <input type="text" inputMode="decimal" value={yieldRatio} onChange={(e) => setYieldRatio(clamp(asNumberOr(e.target.value, 0)))} className="flex-1 min-w-0 rounded border border-stone-200 px-2 py-1.5 text-sm text-right tabular-nums" />
+      <input type="text" value={name} onChange={(e) => setName(e.target.value)}
+        placeholder={t('configNamePlaceholder')}
+        className="mb-2 w-full rounded border border-stone-200 px-2 py-1.5 text-sm" />
+      <div className="mb-2">
+        <p className="mb-1 text-xs text-stone-500">{t('ratioSelectLabel')}</p>
+        <div className="flex gap-1.5">
+          {ESPRESSO_RATIO_PRESETS.map(p => (
+            <button
+              key={p.ratio}
+              type="button"
+              onClick={() => { setYieldRatio(p.ratio); if (!name) setName(p.name) }}
+              className={`flex-1 rounded-lg border py-2 text-center transition ${yieldRatio === p.ratio
+                ? 'border-espresso-500 bg-espresso-600 text-white'
+                : 'border-stone-200 bg-stone-50 text-stone-700'}`}
+            >
+              <div className="text-sm font-bold">{p.name}</div>
+              <div className="text-[10px] opacity-80">{p.desc}</div>
+            </button>
+          ))}
         </div>
       </div>
       <div className="flex gap-1.5 items-center">
-        <button type="button" onClick={() => onSave({ ...config, name, yieldRatio })} className="rounded px-3 py-1.5 text-xs text-white bg-espresso-600">儲存</button>
-        <button type="button" onClick={onCancel} className="rounded px-3 py-1.5 text-xs text-stone-700 bg-stone-200">取消</button>
-        <button type="button" onClick={onDelete || (() => {})} disabled={!onDelete} className="rounded px-3 py-1.5 text-xs text-white bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed">刪除</button>
+        <button type="button" onClick={() => onSave({ ...config, name: name || espressoRatioName(yieldRatio), yieldRatio })} className="rounded px-3 py-1.5 text-xs text-white bg-espresso-600">{t('save')}</button>
+        <button type="button" onClick={onCancel} className="rounded px-3 py-1.5 text-xs text-stone-700 bg-stone-200">{t('cancel')}</button>
+        <button type="button" onClick={onDelete || (() => {})} disabled={!onDelete} className="rounded px-3 py-1.5 text-xs text-white bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed">{t('delete')}</button>
       </div>
     </div>
   )
@@ -420,36 +537,36 @@ function CustomDrinkForm({ drink, onSave, onCancel, onDelete }) {
           <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="品項名稱" className="w-full rounded border border-stone-200 px-2 py-1.5 text-sm" />
         </div>
       </div>
-      <div className="flex gap-2 mb-2">
-        <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
-          <label className="flex items-center gap-1.5 text-xs text-stone-600 shrink-0 h-9">
-            <input type="checkbox" checked={hasMilk} onChange={(e) => setHasMilk(e.target.checked)} />
-            濃縮:
-          </label>
-          <select value={extraLabel} onChange={(e) => setExtraLabel(e.target.value)} className="h-9 rounded border border-stone-200 px-2 py-1.5 text-sm text-stone-800 flex-1 min-w-[4rem]" disabled={!hasMilk}>
-            {EXTRA_LABEL_OPTIONS.map(o => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
-          {hasMilk && (
-            <>
-              <span className="text-xs text-stone-600 shrink-0">1:</span>
-              <input type="text" inputMode="decimal" value={milkParts} onChange={(e) => setMilkParts(asNumberOr(e.target.value, 0))} className="h-9 w-14 rounded border border-stone-200 px-2 py-1.5 text-sm text-right tabular-nums" />
-            </>
-          )}
+      {/* 液體比例 */}
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
+        <label className="flex items-center gap-1.5 text-xs text-stone-600 shrink-0 h-9">
+          <input type="checkbox" checked={hasMilk} onChange={(e) => setHasMilk(e.target.checked)} />
+          濃縮:
+        </label>
+        <select value={extraLabel} onChange={(e) => setExtraLabel(e.target.value)} className="h-9 rounded border border-stone-200 px-2 py-1.5 text-sm text-stone-800 flex-1 min-w-[4rem]" disabled={!hasMilk}>
+          {EXTRA_LABEL_OPTIONS.map(o => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+        {hasMilk && (
+          <>
+            <span className="text-xs text-stone-600 shrink-0">1:</span>
+            <input type="text" inputMode="decimal" value={milkParts} onChange={(e) => setMilkParts(asNumberOr(e.target.value, 0))} className="h-9 w-14 rounded border border-stone-200 px-2 py-1.5 text-sm text-right tabular-nums" />
+          </>
+        )}
+      </div>
+      {/* 其他配料 */}
+      <div className="flex gap-1 items-start mb-2">
+        <div className="flex-1 min-w-0 space-y-1">
+          {others.map((o, i) => (
+            <div key={i} className="flex gap-1 items-center h-9">
+              <input type="text" value={o.name} onChange={(e) => updateOther(i, 'name', e.target.value)} placeholder="名稱" className="flex-1 min-w-0 h-9 rounded border border-stone-200 px-2 py-1.5 text-sm" />
+              <input type="text" value={o.amount} onChange={(e) => updateOther(i, 'amount', e.target.value)} placeholder="比例／少許" className="flex-1 min-w-0 h-9 rounded border border-stone-200 px-2 py-1.5 text-sm" />
+              <button type="button" onClick={() => removeOther(i)} className="text-red-500 shrink-0 h-9 w-9 flex items-center justify-center" aria-label="刪除">×</button>
+            </div>
+          ))}
         </div>
-        <div className="flex-1 min-w-0 flex gap-1 items-center">
-          <div className="flex-1 min-w-0 space-y-1">
-            {others.map((o, i) => (
-              <div key={i} className="flex gap-1 items-center h-9">
-                <input type="text" value={o.name} onChange={(e) => updateOther(i, 'name', e.target.value)} placeholder="名稱" className="flex-1 min-w-0 h-9 rounded border border-stone-200 px-2 py-1.5 text-sm" />
-                <input type="text" value={o.amount} onChange={(e) => updateOther(i, 'amount', e.target.value)} placeholder="比例／少許" className="w-20 h-9 rounded border border-stone-200 px-2 py-1.5 text-sm" />
-                <button type="button" onClick={() => removeOther(i)} className="text-red-500 shrink-0 h-9 w-9 flex items-center justify-center" aria-label="刪除">×</button>
-              </div>
-            ))}
-          </div>
-          <button type="button" onClick={addOther} className="shrink-0 flex h-9 w-9 items-center justify-center rounded border border-stone-200 text-stone-500 hover:bg-stone-50 text-lg" aria-label="新增">+</button>
-        </div>
+        <button type="button" onClick={addOther} className="shrink-0 flex h-9 w-9 items-center justify-center rounded border border-stone-200 text-stone-500 hover:bg-stone-50 text-lg" aria-label="新增">+</button>
       </div>
       <div className="flex gap-1.5 items-center">
         <button type="button" onClick={() => onSave({ ...drink, name, milkParts: hasMilk ? milkParts : null, extraLabel: hasMilk ? extraLabel : undefined, others })} className="rounded px-3 py-1.5 text-xs text-white bg-espresso-600">儲存</button>
@@ -556,7 +673,7 @@ function TimeWaterChart({ points: pointsProp, totalWater, maxTime: maxTimeProp }
       <line x1={pad.l} x2={w - pad.r} y1={h - pad.b} y2={h - pad.b} stroke="#a3a3a3" strokeWidth="0.75" />
       <line x1={pad.l} x2={pad.l} y1={pad.t} y2={h - pad.b} stroke="#a3a3a3" strokeWidth="0.75" />
       {/* 軸單位：橫軸「秒」→右下角，縱軸「ml」→左上角（textAnchor=start 從 x=1 起，不與刻度文字重疊） */}
-      <text x={w - pad.r + 2} y={h - pad.b + 10} textAnchor="end" className="fill-stone-400" fontSize="7">秒</text>
+      <text x={w - pad.r + 2} y={h - pad.b + 10} textAnchor="end" className="fill-stone-400" fontSize="7">s</text>
       <text x={1} y={pad.t - 1} textAnchor="start" className="fill-stone-400" fontSize="7">ml</text>
       <path d={pathD} fill="none" stroke="currentColor" strokeWidth="2" className="text-pour-500" strokeLinecap="round" strokeLinejoin="round" />
       {points.map((p, i) => (
@@ -771,6 +888,7 @@ function clampAbsorption(v) {
 }
 
 function PourOverTab() {
+  const { t } = useLang()
   // ── 持久化狀態 ────────────────────────────────────────────────────────────
   const [beans, setBeans]                 = useLocalStorageState('coffee.pour.beans', [])
   const [selectedBeanId, setSelectedBeanId] = useLocalStorageState('coffee.pour.selectedBeanId', '')
@@ -879,11 +997,6 @@ function PourOverTab() {
   const tableMaxSec = chartPoints.length ? Math.max(...chartPoints.map((p) => p.time)) : 0
   const timeAxisMax = Math.max(60, Math.ceil(tableMaxSec / 60) * 60)
   const pourTableRows = tableEditing && planStepsEditBuffer ? planStepsEditBuffer : planSteps
-
-  const techniqueScoreKeys = [
-    { key: 'bonusExt', label: '萃取' }, { key: 'bonusFlow', label: '水流' },
-    { key: 'bonusBed', label: '粉層' }, { key: 'bonusEven', label: '均勻' },
-  ]
 
   // ── helpers ───────────────────────────────────────────────────────────────
   const patchCurrentBean = (patch) => {
@@ -1058,36 +1171,27 @@ function PourOverTab() {
     <div className="space-y-3 pb-24">
       {/* 目標總注水量 */}
       <section className="rounded-xl bg-pour-700 p-3 text-white shadow transition-colors">
-        <div className="flex items-baseline gap-x-2 gap-y-0.5">
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 flex-1 min-w-0">
-            {planEditing && currentBean ? (
-              <input
-                type="text"
-                value={currentBean.name ?? ''}
-                onChange={(e) => patchCurrentBean({ name: e.target.value })}
-                className="rounded border border-white/40 bg-white/15 px-2 py-0.5 text-sm font-medium text-white placeholder:text-pour-200 focus:border-white focus:outline-none"
-                placeholder="豆子名稱"
-                aria-label="豆子名稱"
-              />
-            ) : (
-              <button
-                type="button"
-                onClick={handleRenameBean}
-                className="shrink-0 text-left text-sm font-semibold underline-offset-2 transition hover:underline active:opacity-90"
-                title="點擊修改豆子名稱"
-              >
-                {currentBean ? currentBean.name : '—'}
-              </button>
-            )}
-            <span className="text-xs text-pour-200 leading-5">
-              {[
-                currentBean?.origin && `產地 ${currentBean.origin}`,
-                currentBean?.variety && `品種 ${currentBean.variety}`,
-                currentBean?.process && `加工 ${currentBean.process}`,
-                currentBean?.roast && `焙 ${currentBean.roast}`,
-              ].filter(Boolean).join(' · ') || <span className="opacity-60">尚未填寫豆子資訊</span>}
-            </span>
-          </div>
+        {/* 第一行：豆名 + 水量 */}
+        <div className="flex items-center justify-between gap-2">
+          {planEditing && currentBean ? (
+            <input
+              type="text"
+              value={currentBean.name ?? ''}
+              onChange={(e) => patchCurrentBean({ name: e.target.value })}
+              className="flex-1 min-w-0 rounded border border-white/40 bg-white/15 px-2 py-0.5 text-sm font-medium text-white placeholder:text-pour-200 focus:border-white focus:outline-none"
+              placeholder="豆子名稱"
+              aria-label="豆子名稱"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={handleRenameBean}
+              className="flex-1 min-w-0 text-left text-sm font-semibold underline-offset-2 transition hover:underline active:opacity-90 truncate"
+              title="點擊修改豆子名稱"
+            >
+              {currentBean ? currentBean.name : '—'}
+            </button>
+          )}
           {/* 總水量/水量 */}
           {(() => {
             const cw = parseFloat(methodParamDraft.cw)
@@ -1104,14 +1208,37 @@ function PourOverTab() {
             )
           })()}
         </div>
+        {/* 第二行：產地 品種 */}
+        {(currentBean?.origin || currentBean?.variety) && (
+          <div className="mt-1 text-xs text-pour-200">
+            {[
+              currentBean?.origin && `${t('originLabel')} ${currentBean.origin}`,
+              currentBean?.variety && `${t('varietyLabel')} ${currentBean.variety}`,
+            ].filter(Boolean).join(' · ')}
+          </div>
+        )}
+        {/* 第三行：加工 焙度 */}
+        {(currentBean?.process || currentBean?.roast) && (
+          <div className="text-xs text-pour-200">
+            {[
+              currentBean?.process && `${t('processLabel')} ${currentBean.process}`,
+              currentBean?.roast && `${t('roastLabel')} ${currentBean.roast}`,
+            ].filter(Boolean).join(' · ')}
+          </div>
+        )}
+        {/* 無資訊提示 */}
+        {!currentBean?.origin && !currentBean?.variety && !currentBean?.process && !currentBean?.roast && (
+          <div className="mt-1 text-xs text-pour-200 opacity-60">{t('noBeanInfo')}</div>
+        )}
+        {/* 風味特色 */}
         {currentBean?.flavorNote && (
-          <div className="mt-1 text-xs text-pour-200">風味特色：{currentBean.flavorNote}</div>
+          <div className="mt-0.5 text-xs text-pour-200">{t('flavorNoteLabel')}：{currentBean.flavorNote}</div>
         )}
       </section>
 
       {/* 豆子 / 手法選單列 + 編輯按鈕 */}
       <section className="flex items-center gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wider text-stone-500 shrink-0">豆子</span>
+        <span className="text-xs font-semibold uppercase tracking-wider text-stone-500 shrink-0">{t('beanLabel')}</span>
         <select
           value={selectedBeanId}
           onChange={(e) => { setPlanStepsEditBuffer(null); setPlanEditing(false); setSelectedBeanId(e.target.value) }}
@@ -1119,7 +1246,7 @@ function PourOverTab() {
         >
           {beans.map((b) => <option key={b.id} value={b.id}>{b.name || '未命名'}</option>)}
         </select>
-        <span className="text-xs font-semibold uppercase tracking-wider text-stone-500 shrink-0">手法</span>
+        <span className="text-xs font-semibold uppercase tracking-wider text-stone-500 shrink-0">{t('methodLabel')}</span>
         <select
           value={selectedMethodId}
           onChange={(e) => setSelectedMethodId(e.target.value)}
@@ -1169,7 +1296,7 @@ function PourOverTab() {
           <div className="px-3">
             {/* ── 豆子區 ── */}
             <div className="flex items-center gap-2 mb-1.5">
-              <span className="text-xs font-semibold text-stone-500 shrink-0">豆子</span>
+              <span className="text-xs font-semibold text-stone-500 shrink-0">{t('beanLabel')}</span>
               <select value={selectedBeanId}
                 onChange={(e) => setSelectedBeanId(e.target.value)}
                 className="flex-1 min-w-0 rounded border border-stone-200 px-2 py-1.5 text-sm text-stone-800 focus:border-pour-400 focus:outline-none">
@@ -1177,24 +1304,24 @@ function PourOverTab() {
               </select>
               <button type="button" onClick={openAddBeanModal}
                 className="shrink-0 w-12 rounded py-1.5 text-center text-xs font-medium text-white bg-pour-600 transition active:bg-pour-700"
-                aria-label="新增豆子">新增</button>
+                aria-label="新增豆子">{t('add')}</button>
               <button type="button" onClick={handleDeleteCurrentBean} disabled={beans.length <= 1}
                 className="shrink-0 w-12 rounded py-1.5 text-center text-xs font-medium text-white bg-red-500 transition active:bg-red-600 disabled:opacity-30 disabled:cursor-not-allowed"
-                aria-label="刪除豆子">刪除</button>
+                aria-label="刪除豆子">{t('delete')}</button>
             </div>
             <div className="grid grid-cols-4 gap-2 text-[13px] mb-1.5">
-              <input type="text" placeholder="產地"
+              <input type="text" placeholder={t('originLabel')}
                 value={currentBean?.origin ?? ''} onChange={(e) => patchCurrentBean({ origin: e.target.value })}
                 className={INPUT_CELL} />
-              <input type="text" placeholder="品種"
+              <input type="text" placeholder={t('varietyLabel')}
                 value={currentBean?.variety ?? ''} onChange={(e) => patchCurrentBean({ variety: e.target.value })}
                 className={INPUT_CELL} />
-              <input type="text" placeholder="加工方式"
+              <input type="text" placeholder={t('processLabel')}
                 value={currentBean?.process ?? ''} onChange={(e) => patchCurrentBean({ process: e.target.value })}
                 className={INPUT_CELL} />
               <select value={roastVal} onChange={(e) => patchCurrentBean({ roast: e.target.value })}
                 className={INPUT_CELL}>
-                <option value="">— 焙度 —</option>
+                <option value="">— {t('roastLabel')} —</option>
                 {roastIsLegacy && <option value={roastVal}>{roastVal}（舊）</option>}
                 {ROAST_LEVELS.map((lvl) => <option key={lvl} value={lvl}>{lvl}</option>)}
               </select>
@@ -1207,7 +1334,7 @@ function PourOverTab() {
 
             {/* ── 手法區 ── */}
             <div className="flex items-center gap-2 mb-1.5">
-              <span className="text-xs font-semibold text-stone-500 shrink-0">手法</span>
+              <span className="text-xs font-semibold text-stone-500 shrink-0">{t('methodLabel')}</span>
               <select value={selectedMethodId}
                 onChange={(e) => setSelectedMethodId(e.target.value)}
                 className="flex-1 min-w-0 rounded border border-stone-200 px-2 py-1.5 text-sm text-stone-800 focus:border-pour-400 focus:outline-none">
@@ -1215,10 +1342,10 @@ function PourOverTab() {
               </select>
               <button type="button" onClick={openAddMethodModal}
                 className="shrink-0 w-12 rounded py-1.5 text-center text-xs font-medium text-white bg-pour-600 transition active:bg-pour-700"
-                aria-label="新增手法">新增</button>
+                aria-label="新增手法">{t('add')}</button>
               <button type="button" onClick={handleDeleteCurrentMethod} disabled={allMethods.length <= 1}
                 className="shrink-0 w-12 rounded py-1.5 text-center text-xs font-medium text-white bg-red-500 transition active:bg-red-600 disabled:opacity-30 disabled:cursor-not-allowed"
-                aria-label="刪除手法">刪除</button>
+                aria-label="刪除手法">{t('delete')}</button>
             </div>
           </div>
         </section>
@@ -1236,36 +1363,36 @@ function PourOverTab() {
             <button type="button"
               onClick={() => setTechniqueCardOpen((o) => !o)}
               className="flex w-full items-center justify-between px-3 py-2.5 text-left transition active:bg-stone-50">
-              <span className="text-xs font-semibold text-stone-500">沖煮技巧</span>
+              <span className="text-xs font-semibold text-stone-500">{t('techniqueLabel')}</span>
               <span className="text-stone-400 text-sm">{techniqueCardOpen ? '▼' : '▶'}</span>
             </button>
             {techniqueCardOpen && <div className="px-3 pb-3 border-t border-stone-100 pt-2">
               <div className="flex items-center gap-2 mb-1.5">
-                <span className="text-xs font-semibold text-stone-500 shrink-0">技巧</span>
+                <span className="text-xs font-semibold text-stone-500 shrink-0">{t('techniqueItem')}</span>
                 <select
                   value={effectiveId}
                   onChange={(e) => { setNewTechniqueDraft(null); setInlineTechniqueId(e.target.value) }}
                   className="flex-1 min-w-0 rounded border border-stone-200 px-2 py-1.5 text-sm text-stone-800 focus:border-pour-400 focus:outline-none">
-                  {isCreating && <option value="__new__">— 新技巧 —</option>}
-                  {techniques.map((t) => <option key={t.id} value={t.id}>{t.name || '未命名'}</option>)}
+                  {isCreating && <option value="__new__">{t('newTechniqueOpt')}</option>}
+                  {techniques.map((tc) => <option key={tc.id} value={tc.id}>{tc.name || '未命名'}</option>)}
                 </select>
                 <button type="button"
-                  onClick={() => setNewTechniqueDraft({ id: `tech-${Date.now()}`, name: '', effectSour: '', effectSweet: '', effectBitter: '', effectOff: '', bonusExt: 0, bonusFlow: 0, bonusBed: 0, bonusEven: 0 })}
+                  onClick={() => setNewTechniqueDraft({ id: `tech-${Date.now()}`, name: '', effectSour: '', effectSweet: '', effectBitter: '', effectOff: '' })}
                   disabled={isCreating}
-                  className="shrink-0 w-12 rounded py-1.5 text-center text-xs font-medium text-white bg-pour-600 transition active:bg-pour-700 disabled:opacity-40">新增</button>
+                  className="shrink-0 w-12 rounded py-1.5 text-center text-xs font-medium text-white bg-pour-600 transition active:bg-pour-700 disabled:opacity-40">{t('add')}</button>
                 <button type="button"
                   onClick={() => {
                     if (isCreating) { setNewTechniqueDraft(null); return }
                     if (!activeTech) return
                     if (techniques.length <= 1) { window.alert('至少保留一個技巧'); return }
                     if (!window.confirm(`確定刪除「${activeTech.name || '未命名'}」？`)) return
-                    const next = techniques.filter((t) => t.id !== activeTech.id)
+                    const next = techniques.filter((tc) => tc.id !== activeTech.id)
                     setTechniques(next)
                     setInlineTechniqueId(next[0]?.id ?? null)
                   }}
                   disabled={!isCreating && techniques.length <= 1}
                   className={`shrink-0 w-12 rounded py-1.5 text-center text-xs font-medium text-white transition disabled:opacity-30 disabled:cursor-not-allowed ${isCreating ? 'bg-stone-400 active:bg-stone-500' : 'bg-red-500 active:bg-red-600'}`}>
-                  {isCreating ? '取消' : '刪除'}
+                  {isCreating ? t('cancel') : t('delete')}
                 </button>
               </div>
 
@@ -1274,7 +1401,7 @@ function PourOverTab() {
                   key={activeTech.id}
                   technique={activeTech}
                   onSave={(form) => {
-                    const saved = { ...activeTech, ...form, bonusExt: asNumberOr(form.bonusExt, 0), bonusFlow: asNumberOr(form.bonusFlow, 0), bonusBed: asNumberOr(form.bonusBed, 0), bonusEven: asNumberOr(form.bonusEven, 0) }
+                    const saved = { ...activeTech, ...form }
                     if (isCreating) {
                       setTechniques((prev) => [...prev, saved])
                       setInlineTechniqueId(saved.id)
@@ -1321,7 +1448,7 @@ function PourOverTab() {
                 <th title="流速（ml/s）" className="p-1.5 font-semibold text-stone-600 text-center">v</th>
                 <th title="沖煮技巧" className="p-1.5 font-semibold text-stone-600 text-left pl-[10px]">
                   <span className="flex items-center gap-1">
-                    μ
+                    {t('techniqueItem')}
                     {tableEditing && (
                       <button
                         type="button"
@@ -1339,7 +1466,7 @@ function PourOverTab() {
                       onClick={toggleTableEditing}
                       className={`text-[10px] font-medium leading-none transition ${tableEditing ? 'text-pour-700 font-semibold' : 'text-stone-400'}`}
                     >
-                      {tableEditing ? '完成' : '編輯'}
+                      {tableEditing ? t('done') : t('edit')}
                     </button>
                     <button
                       type="button"
@@ -1358,7 +1485,7 @@ function PourOverTab() {
                       }}
                       className={`text-[10px] font-medium leading-none transition ${tableEditing ? 'text-pour-600' : 'text-stone-200'}`}
                     >
-                      新增
+                      ＋
                     </button>
                   </div>
                 </th>
@@ -1497,7 +1624,7 @@ function PourOverTab() {
           disabled={!currentBean}
           className="flex-1 rounded-xl bg-pour-600 py-3 text-sm font-semibold text-white shadow transition active:scale-[0.99] disabled:opacity-50"
         >
-          ▶ 開始沖煮
+          {t('startBrew')}
         </button>
         <button
           type="button"
@@ -1508,7 +1635,7 @@ function PourOverTab() {
           disabled={!currentBean}
           className="flex-1 rounded-xl border-2 border-pour-300 bg-white py-3 text-sm font-semibold text-pour-800 shadow-sm transition active:scale-[0.99] disabled:opacity-50"
         >
-          ＋ 記錄
+          {t('addLog')}
         </button>
       </div>
 
@@ -1521,7 +1648,7 @@ function PourOverTab() {
             onChange={(e) => setHistoryFilterBeanId(e.target.value)}
             className="h-9 flex-1 min-w-0 rounded-lg border border-stone-200 bg-stone-50 px-2 text-xs text-stone-700 focus:border-pour-400 focus:outline-none"
           >
-            <option value="">全部豆子</option>
+            <option value="">{t('allBeans')}</option>
             {beans.map((b) => (
               <option key={b.id} value={b.id}>{b.name}</option>
             ))}
@@ -1531,8 +1658,8 @@ function PourOverTab() {
             onClick={() => setHistorySectionOpen((o) => !o)}
             className="h-9 flex shrink-0 items-center gap-1.5 rounded-lg border border-stone-200 bg-stone-50/80 px-3 transition active:bg-stone-100"
           >
-            <span className="text-xs font-semibold uppercase tracking-wider text-stone-600">紀錄</span>
-            <span className="text-[11px] tabular-nums text-stone-500">{sortedHistory.length} 筆</span>
+            <span className="text-xs font-semibold uppercase tracking-wider text-stone-600">{t('historyLabel')}</span>
+            <span className="text-[11px] tabular-nums text-stone-500">{sortedHistory.length}</span>
             <span className="text-xs text-stone-400" aria-hidden>{historySectionOpen ? '▼' : '▶'}</span>
           </button>
         </div>
@@ -1563,10 +1690,10 @@ function PourOverTab() {
                           <span className="text-[11px] text-stone-400">{log.methodName}</span>
                         )}
                         <span className={`rounded px-2 py-0.5 text-[11px] font-bold tabular-nums ${log.executionScore >= 7 ? 'bg-emerald-100 text-emerald-900' : log.executionScore <= 4 ? 'bg-amber-100 text-amber-900' : 'bg-stone-100 text-stone-800'}`}>
-                          執行 {log.executionScore}
+                          {t('scoreExecution')} {log.executionScore}
                         </span>
                         <span className={`rounded px-2 py-0.5 text-[11px] font-bold tabular-nums ${log.resultScore >= 7 ? 'bg-emerald-100 text-emerald-900' : log.resultScore <= 4 ? 'bg-amber-100 text-amber-900' : 'bg-stone-100 text-stone-800'}`}>
-                          風味 {log.resultScore}
+                          {t('scoreFlavor')} {log.resultScore}
                         </span>
                         <span className="text-stone-400">{expanded ? '▼' : '▶'}</span>
                       </div>
@@ -1612,7 +1739,7 @@ function PourOverTab() {
                                   <th className="px-1.5 py-1 font-semibold">ΔW</th>
                                   <th className="px-1.5 py-1 font-semibold">ΣW</th>
                                   <th className="px-1.5 py-1 font-semibold">T</th>
-                                  <th className="px-1.5 py-1 font-semibold text-left">μ</th>
+                                  <th className="px-1.5 py-1 font-semibold text-left">{t('techniqueItem')}</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-stone-100">
@@ -1671,11 +1798,11 @@ function PourOverTab() {
       {showBrewLogModal && (
         <section className="fixed inset-0 z-40 flex items-end justify-center bg-black/30 px-4 pb-6 sm:items-center">
           <div className="w-full max-w-sm rounded-xl bg-white p-4 shadow-xl">
-            <h3 className="mb-1 text-sm font-semibold text-stone-800">記錄本次沖煮</h3>
+            <h3 className="mb-1 text-sm font-semibold text-stone-800">{t('logTitle')}</h3>
             <p className="mb-3 text-[11px] text-stone-400">{currentBean?.name}｜{currentMethod?.name}</p>
 
             {/* 實際數據微調 */}
-            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-stone-400">實際使用數據</p>
+            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-stone-400">{t('logActualData')}</p>
             <div className="mb-3 grid grid-cols-3 gap-2 text-[13px]">
               {[
                 { key: 'cw', placeholder: '粉重 g' },
@@ -1694,14 +1821,14 @@ function PourOverTab() {
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-1 block text-[11px] font-medium text-stone-500">執行完美度（1–10）</label>
+                  <label className="mb-1 block text-[11px] font-medium text-stone-500">{t('logExecution')}</label>
                   <input type="range" min={1} max={10} step={1} value={brewExecution}
                     onChange={(e) => setBrewExecution(Number(e.target.value))}
                     className="h-2 w-full accent-pour-600" />
                   <div className="mt-0.5 text-center text-sm font-bold tabular-nums text-pour-700">{brewExecution}</div>
                 </div>
                 <div>
-                  <label className="mb-1 block text-[11px] font-medium text-stone-500">風味結果分數（1–10）</label>
+                  <label className="mb-1 block text-[11px] font-medium text-stone-500">{t('logFlavor')}</label>
                   <input type="range" min={1} max={10} step={1} value={brewResult}
                     onChange={(e) => setBrewResult(Number(e.target.value))}
                     className="h-2 w-full accent-pour-600" />
@@ -1709,23 +1836,23 @@ function PourOverTab() {
                 </div>
               </div>
               <input type="text" value={brewPros} onChange={(e) => setBrewPros(e.target.value)}
-                placeholder="優點 / 亮點"
+                placeholder={t('logPros')}
                 className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm transition focus:border-pour-400 focus:outline-none" />
               <input type="text" value={brewCons} onChange={(e) => setBrewCons(e.target.value)}
-                placeholder="缺點 / 待改進"
+                placeholder={t('logCons')}
                 className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm transition focus:border-pour-400 focus:outline-none" />
               <input type="text" value={brewDirection} onChange={(e) => setBrewDirection(e.target.value)}
-                placeholder="後續修改方向（例：下次研磨調粗一格）"
+                placeholder={t('logDirection')}
                 className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm transition focus:border-pour-400 focus:outline-none" />
             </div>
             <div className="mt-4 flex gap-2">
               <button type="button" onClick={() => setShowBrewLogModal(false)}
                 className="flex-1 rounded-lg bg-stone-200 py-2.5 text-sm font-medium text-stone-700 transition active:bg-stone-300">
-                取消
+                {t('cancel')}
               </button>
               <button type="button" onClick={handleSaveBrewLog}
                 className="flex-1 rounded-lg bg-pour-600 py-2.5 text-sm font-semibold text-white shadow transition active:scale-[0.99]">
-                儲存紀錄
+                {t('logSave')}
               </button>
             </div>
           </div>
@@ -1800,10 +1927,6 @@ function PourOverTab() {
                   effectSweet: form.effectSweet ?? '',
                   effectBitter: form.effectBitter ?? '',
                   effectOff: form.effectOff ?? '',
-                  bonusExt: asNumberOr(form.bonusExt, 0),
-                  bonusFlow: asNumberOr(form.bonusFlow, 0),
-                  bonusBed: asNumberOr(form.bonusBed, 0),
-                  bonusEven: asNumberOr(form.bonusEven, 0),
                 }
                 if (editingTechnique) setTechniques(prev => prev.map(x => x.id === editingTechnique.id ? next : x))
                 else setTechniques(prev => [...prev, next])
@@ -1822,6 +1945,7 @@ function PourOverTab() {
 
 // ─── 沖煮計時器 ──────────────────────────────────────────────────────────────
 function BrewTimerModal({ steps, totalWater = 0, onClose, onLogBrew }) {
+  const { t } = useLang()
   const [elapsed, setElapsed] = useState(0)
   const [running, setRunning] = useState(false)
   const alertedRef  = useRef(new Set())
@@ -1898,7 +2022,7 @@ function BrewTimerModal({ steps, totalWater = 0, onClose, onLogBrew }) {
         {/* 標頭 */}
         <div className="bg-pour-700 px-4 pt-4 pb-3 text-white">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-pour-200">沖煮計時</span>
+            <span className="text-xs font-semibold uppercase tracking-wider text-pour-200">{t('timerTitle')}</span>
             <button type="button" onClick={onClose} className="text-pour-300 hover:text-white text-xl leading-none" aria-label="關閉">×</button>
           </div>
           <div className="text-5xl font-bold tabular-nums text-center tracking-tight">{fmt(elapsed)}</div>
@@ -1913,7 +2037,7 @@ function BrewTimerModal({ steps, totalWater = 0, onClose, onLogBrew }) {
                       <span className="mx-2 text-pour-400">→</span>
                       <span className="font-semibold text-pour-100">{nextStep.technique || '—'}</span>
                     </>
-                  : done ? <span className="text-pour-100 font-semibold">沖煮完成</span> : null}
+                  : done ? <span className="text-pour-100 font-semibold">{t('brewComplete')}</span> : null}
               </div>
             )
           })()}
@@ -1948,17 +2072,17 @@ function BrewTimerModal({ steps, totalWater = 0, onClose, onLogBrew }) {
           {done ? (
             <>
               <button type="button" onClick={reset}
-                className="rounded-lg bg-stone-200 px-4 py-2.5 text-sm text-stone-700 transition active:bg-stone-300">重新開始</button>
+                className="rounded-lg bg-stone-200 px-4 py-2.5 text-sm text-stone-700 transition active:bg-stone-300">{t('restartBtn')}</button>
               <button type="button" onClick={onLogBrew}
-                className="flex-1 rounded-lg bg-pour-600 py-2.5 text-sm font-semibold text-white shadow transition active:scale-[0.99]">記錄此次沖煮</button>
+                className="flex-1 rounded-lg bg-pour-600 py-2.5 text-sm font-semibold text-white shadow transition active:scale-[0.99]">{t('logBrewBtn')}</button>
             </>
           ) : (
             <>
               <button type="button" onClick={reset}
-                className="rounded-lg bg-stone-200 px-4 py-2.5 text-sm text-stone-700 transition active:bg-stone-300">重置</button>
+                className="rounded-lg bg-stone-200 px-4 py-2.5 text-sm text-stone-700 transition active:bg-stone-300">{t('resetBtn')}</button>
               <button type="button" onClick={running ? () => setRunning(false) : handleStart}
                 className={`flex-1 rounded-lg py-2.5 text-sm font-semibold text-white shadow transition active:scale-[0.99] ${running ? 'bg-amber-500' : 'bg-pour-600'}`}>
-                {running ? '暫停' : elapsed === 0 ? '開始' : '繼續'}
+                {running ? t('pauseBtn') : elapsed === 0 ? t('startBtn') : t('resumeBtn')}
               </button>
             </>
           )}
@@ -1969,83 +2093,42 @@ function BrewTimerModal({ steps, totalWater = 0, onClose, onLogBrew }) {
 }
 
 function TechniqueForm({ technique, onSave, onCancel, inline = false }) {
+  const { t } = useLang()
   const [name, setName] = useState(technique?.name || '')
   const [effectSour, setEffectSour] = useState(technique?.effectSour ?? '')
   const [effectSweet, setEffectSweet] = useState(technique?.effectSweet ?? '')
   const [effectBitter, setEffectBitter] = useState(technique?.effectBitter ?? '')
   const [effectOff, setEffectOff] = useState(technique?.effectOff ?? '')
-  const [bonusExt, setBonusExt] = useState(String(asNumberOr(technique?.bonusExt, 0)))
-  const [bonusFlow, setBonusFlow] = useState(String(asNumberOr(technique?.bonusFlow, 0)))
-  const [bonusBed, setBonusBed] = useState(String(asNumberOr(technique?.bonusBed, 0)))
-  const [bonusEven, setBonusEven] = useState(String(asNumberOr(technique?.bonusEven, 0)))
   useEffect(() => {
     setName(technique?.name || '')
     setEffectSour(technique?.effectSour ?? '')
     setEffectSweet(technique?.effectSweet ?? '')
     setEffectBitter(technique?.effectBitter ?? '')
     setEffectOff(technique?.effectOff ?? '')
-    setBonusExt(String(asNumberOr(technique?.bonusExt, 0)))
-    setBonusFlow(String(asNumberOr(technique?.bonusFlow, 0)))
-    setBonusBed(String(asNumberOr(technique?.bonusBed, 0)))
-    setBonusEven(String(asNumberOr(technique?.bonusEven, 0)))
   }, [technique?.id])
-  const previewMods = [
-    { key: 'bonusExt', label: '萃取', value: asNumberOr(bonusExt, 0) },
-    { key: 'bonusFlow', label: '水流', value: asNumberOr(bonusFlow, 0) },
-    { key: 'bonusBed', label: '粉層', value: asNumberOr(bonusBed, 0) },
-    { key: 'bonusEven', label: '均勻', value: asNumberOr(bonusEven, 0) },
-  ]
   return (
     <div className={inline ? '' : 'mt-2 rounded-xl border border-pour-200 bg-white p-2.5 shadow-sm'}>
       {!inline && <h3 className="mb-2 text-sm font-semibold text-stone-800">{technique ? '編輯沖煮技巧' : '新增沖煮技巧'}</h3>}
-      <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="例：畫圈、中心注水" className="mb-2 w-full rounded border border-stone-200 px-2 py-1.5 text-sm" />
-      <p className="mb-2 text-xs text-stone-600 leading-snug">
-        填寫此手法在實務上的<strong className="text-stone-800">萃取與操作效果</strong>（例如提高萃取度、加大攪動、穩定粉床），而非杯測風味形容。
-      </p>
+      <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder={t('techniqueNamePlaceholder')} className="mb-2 w-full rounded border border-stone-200 px-2 py-1.5 text-sm" />
       <div className="mb-1 flex items-center gap-2">
-        <span className="w-16 shrink-0 text-xs text-stone-600">萃取</span>
+        <span className="w-16 shrink-0 text-xs text-stone-600">{t('extractionLabel')}</span>
         <input type="text" value={effectSour} onChange={(e) => setEffectSour(e.target.value)} placeholder="例：提高萃取率、延長悶蒸" className="flex-1 rounded border border-stone-200 px-2 py-1 text-xs" />
       </div>
       <div className="mb-1 flex items-center gap-2">
-        <span className="w-16 shrink-0 text-xs text-stone-600">水流</span>
+        <span className="w-16 shrink-0 text-xs text-stone-600">{t('flowLabel')}</span>
         <input type="text" value={effectSweet} onChange={(e) => setEffectSweet(e.target.value)} placeholder="例：大水流攪動、提高對流" className="flex-1 rounded border border-stone-200 px-2 py-1 text-xs" />
       </div>
       <div className="mb-1 flex items-center gap-2">
-        <span className="w-16 shrink-0 text-xs text-stone-600">粉層</span>
+        <span className="w-16 shrink-0 text-xs text-stone-600">{t('bedLabel')}</span>
         <input type="text" value={effectBitter} onChange={(e) => setEffectBitter(e.target.value)} placeholder="例：沖刷粉牆、延長浸泡" className="flex-1 rounded border border-stone-200 px-2 py-1 text-xs" />
       </div>
-      <div className="mb-2 flex items-center gap-2">
-        <span className="w-16 shrink-0 text-xs text-stone-600">其他</span>
+      <div className="mb-3 flex items-center gap-2">
+        <span className="w-16 shrink-0 text-xs text-stone-600">{t('otherLabel')}</span>
         <input type="text" value={effectOff} onChange={(e) => setEffectOff(e.target.value)} placeholder="例：減少通道、均勻受水" className="flex-1 rounded border border-stone-200 px-2 py-1 text-xs" />
       </div>
-      <p className="mb-1 text-xs text-stone-500">加成數字（-5 ~ +5）</p>
-      <div className="mb-1 grid grid-cols-2 gap-1.5">
-        <input type="text" inputMode="numeric" value={bonusExt} onChange={(e) => setBonusExt(e.target.value)} placeholder="萃取 +2" className="rounded border border-stone-200 px-2 py-1 text-xs" />
-        <input type="text" inputMode="numeric" value={bonusFlow} onChange={(e) => setBonusFlow(e.target.value)} placeholder="水流 +1" className="rounded border border-stone-200 px-2 py-1 text-xs" />
-        <input type="text" inputMode="numeric" value={bonusBed} onChange={(e) => setBonusBed(e.target.value)} placeholder="粉層 +1" className="rounded border border-stone-200 px-2 py-1 text-xs" />
-        <input type="text" inputMode="numeric" value={bonusEven} onChange={(e) => setBonusEven(e.target.value)} placeholder="均勻 +2" className="rounded border border-stone-200 px-2 py-1 text-xs" />
-      </div>
-      <div className="mb-2 space-y-1.5">
-        {previewMods.map((m) => {
-          const mod = Math.max(-5, Math.min(5, m.value))
-          const basePct = 50
-          const modPct = (Math.abs(mod) / 5) * 50
-          const grayPct = mod < 0 ? Math.max(0, basePct - modPct) : basePct
-          return (
-            <div key={m.key} className="flex items-center gap-2">
-              <span className="w-12 shrink-0 text-[11px] text-stone-600">{m.label}</span>
-              <div className="flex-1 flex h-5 items-center rounded overflow-hidden bg-stone-100">
-                <div className="h-full bg-stone-400 shrink-0" style={{ width: `${grayPct}%` }} />
-                {mod > 0 ? <div className="h-full bg-green-500 shrink-0 text-[10px] font-bold text-white pr-1 text-right" style={{ width: `${modPct}%` }}>+{mod}</div> : null}
-                {mod < 0 ? <div className="h-full bg-red-500 shrink-0 text-[10px] font-bold text-white pr-1 text-right" style={{ width: `${modPct}%` }}>{mod}</div> : null}
-              </div>
-            </div>
-          )
-        })}
-      </div>
       <div className="flex gap-1.5">
-        <button type="button" onClick={() => onSave({ name, effectSour, effectSweet, effectBitter, effectOff, bonusExt, bonusFlow, bonusBed, bonusEven })} className="rounded bg-pour-600 px-3 py-1.5 text-xs text-white">{inline ? '套用' : '儲存'}</button>
-        {!inline && <button type="button" onClick={onCancel} className="rounded bg-stone-200 px-3 py-1.5 text-xs text-stone-700">取消</button>}
+        <button type="button" onClick={() => onSave({ name, effectSour, effectSweet, effectBitter, effectOff })} className="rounded bg-pour-600 px-3 py-1.5 text-xs text-white">{inline ? t('confirm') : t('save')}</button>
+        {!inline && <button type="button" onClick={onCancel} className="rounded bg-stone-200 px-3 py-1.5 text-xs text-stone-700">{t('cancel')}</button>}
       </div>
     </div>
   )
@@ -2054,30 +2137,45 @@ function TechniqueForm({ technique, onSave, onCancel, inline = false }) {
 // ——— 主 App ———
 export default function App() {
   const [activeTab, setActiveTab] = useState('espresso')
+  const [lang, setLang] = useState('zh')
+  const { t } = useLang()
+  const tl = (key, ...args) => {
+    const val = TRANSLATIONS[lang]?.[key] ?? TRANSLATIONS.zh[key] ?? key
+    return typeof val === 'function' ? val(...args) : val
+  }
   return (
-    <div className="min-h-screen safe-area-pb">
-      <header className="sticky top-0 z-10 flex items-center justify-between border-b border-stone-200 bg-stone-100/95 px-3 py-2.5 backdrop-blur">
-        <h1 className="flex-1 text-center text-base font-bold text-stone-800">咖啡萃取與風味調整</h1>
-        <div className="w-9 shrink-0" aria-hidden />
-      </header>
-
-      <main className="mx-auto max-w-lg px-3 pt-3">
-        {activeTab === 'espresso' && <EspressoTab />}
-        {activeTab === 'pour' && <PourOverTab />}
-      </main>
-
-      <nav className="fixed bottom-0 left-0 right-0 z-20 border-t border-stone-200 bg-white/95 backdrop-blur safe-area-pb">
-        <div className="mx-auto flex max-w-lg">
-          <button type="button" onClick={() => setActiveTab('espresso')}
-            className={`flex-1 py-2.5 text-center text-sm font-semibold transition ${activeTab === 'espresso' ? 'bg-espresso-600 text-white' : 'text-stone-500 active:bg-stone-100'}`}>
-            義式濃縮
+    <LangContext.Provider value={lang}>
+      <div className="min-h-screen safe-area-pb">
+        <header className="sticky top-0 z-10 flex items-center justify-between border-b border-stone-200 bg-stone-100/95 px-3 py-2.5 backdrop-blur">
+          <div className="w-9 shrink-0" aria-hidden />
+          <h1 className="flex-1 text-center text-base font-bold text-stone-800">{tl('appTitle')}</h1>
+          <button
+            type="button"
+            onClick={() => setLang(l => l === 'zh' ? 'en' : 'zh')}
+            className="w-9 shrink-0 rounded-lg border border-stone-200 bg-white py-1 text-center text-[11px] font-semibold text-stone-600 transition active:bg-stone-100"
+          >
+            {lang === 'zh' ? 'EN' : '中'}
           </button>
-          <button type="button" onClick={() => setActiveTab('pour')}
-            className={`flex-1 py-2.5 text-center text-sm font-semibold transition ${activeTab === 'pour' ? 'bg-pour-600 text-white' : 'text-stone-500 active:bg-stone-100'}`}>
-            手沖咖啡
-          </button>
-        </div>
-      </nav>
-    </div>
+        </header>
+
+        <main className="mx-auto max-w-lg px-3 pt-3">
+          {activeTab === 'espresso' && <EspressoTab />}
+          {activeTab === 'pour' && <PourOverTab />}
+        </main>
+
+        <nav className="fixed bottom-0 left-0 right-0 z-20 border-t border-stone-200 bg-white/95 backdrop-blur safe-area-pb">
+          <div className="mx-auto flex max-w-lg">
+            <button type="button" onClick={() => setActiveTab('espresso')}
+              className={`flex-1 py-2.5 text-center text-sm font-semibold transition ${activeTab === 'espresso' ? 'bg-espresso-600 text-white' : 'text-stone-500 active:bg-stone-100'}`}>
+              {tl('tabEspresso')}
+            </button>
+            <button type="button" onClick={() => setActiveTab('pour')}
+              className={`flex-1 py-2.5 text-center text-sm font-semibold transition ${activeTab === 'pour' ? 'bg-pour-600 text-white' : 'text-stone-500 active:bg-stone-100'}`}>
+              {tl('tabPour')}
+            </button>
+          </div>
+        </nav>
+      </div>
+    </LangContext.Provider>
   )
 }
