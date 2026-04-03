@@ -10,7 +10,7 @@ const TRANSLATIONS = {
     // Espresso
     espressoLabel: '義式濃縮', productLabel: '產品',
     addConfig: '新增配置', addProduct: '新增品項',
-    ratioLabel: '濃度比例', milkRatioLabel: (extra) => `濃縮與${extra || '牛奶'}的比例`,
+    ratioLabel: '濃度比例', milkRatioLabel: () => '產品比例',
     targetYield: '目標萃取量', waterDispense: '機器出水量',
     singleShot: '單杯萃取', doubleShot: '雙杯萃取', mlUnit: '毫升',
     grindLabel: '研磨 1→10', tampLabel: '壓粉(公斤)', absorptionLabel: '吸水率',
@@ -55,7 +55,7 @@ const TRANSLATIONS = {
     // Espresso
     espressoLabel: 'Espresso', productLabel: 'Drink',
     addConfig: 'New Config', addProduct: 'New Drink',
-    ratioLabel: 'Ratio', milkRatioLabel: (extra) => `Espresso : ${extra || 'Milk'}`,
+    ratioLabel: 'Ratio', milkRatioLabel: () => 'Drink Ratio',
     targetYield: 'Target Yield', waterDispense: 'Water In',
     singleShot: 'Single', doubleShot: 'Double', mlUnit: 'ml',
     grindLabel: 'Grind 1→10', tampLabel: 'Tamp (kg)', absorptionLabel: 'Absorption',
@@ -105,9 +105,9 @@ function useLang() {
 
 // 義式濃縮比例預設（固定三種）
 const ESPRESSO_RATIO_PRESETS = [
-  { ratio: 1, name: 'Ristretto', desc: '1:1' },
-  { ratio: 2, name: 'Espresso',  desc: '1:2' },
-  { ratio: 3, name: 'Lungo',     desc: '1:3' },
+  { ratio: 2, name: 'Ristretto', desc: '1:1' },
+  { ratio: 3, name: 'Espresso',  desc: '1:2' },
+  { ratio: 4, name: 'Lungo',     desc: '1:3' },
 ]
 function espressoRatioName(ratio) {
   return ESPRESSO_RATIO_PRESETS.find(p => p.ratio === ratio)?.name ?? `1:${ratio}`
@@ -211,7 +211,7 @@ function EspressoTab() {
   const { t } = useLang()
   const [cupMode, setCupMode] = useState('double')   // single | double
   const [dose, setDose] = useState(18)
-  const [selectedRatio, setSelectedRatio] = useLocalStorageState('coffee.espresso.selectedRatio', 2)
+  const [selectedRatio, setSelectedRatio] = useLocalStorageState('coffee.espresso.selectedRatio', 3)
   const [absorptionRate, setAbsorptionRate] = useState(1)
   const [grindSize, setGrindSize] = useState(5)
   const [brewTime, setBrewTime] = useState(28)
@@ -232,7 +232,7 @@ function EspressoTab() {
   const allDrinks = customDrinks
   const currentDrink = allDrinks.find(d => d.id === drinkId) || allDrinks[0] || null
   // 比例固定為三種預設
-  const effectiveRatio = ESPRESSO_RATIO_PRESETS.some(p => p.ratio === selectedRatio) ? selectedRatio : 2
+  const effectiveRatio = ESPRESSO_RATIO_PRESETS.some(p => p.ratio === selectedRatio) ? selectedRatio : 3
 
   // 修正 localStorage 可能造成的「已刪除但仍保留在選單的 id」
   useEffect(() => {
@@ -250,7 +250,8 @@ function EspressoTab() {
   const useTargetVolume = doseFromTarget != null
   const effectiveDose = useTargetVolume ? doseFromTarget : dose
   const effectiveYield = useTargetVolume ? Math.floor(espressoFromTarget * 10) / 10 : Math.floor(dose * effectiveRatio * 10) / 10
-  const waterToDispense = Math.round((effectiveYield + effectiveDose * absorptionRate) * 10) / 10
+  // 出水量 = (比例+1) × 粉重，對應命名規則：Ristretto 1:2粉水、Espresso 1:3粉水、Lungo 1:4粉水
+  const waterToDispense = Math.round((effectiveYield + absorptionRate * effectiveDose) * 10) / 10
 
   useEffect(() => {
     if (targetVolumeMl == null || targetVolumeMl <= 0 || effectiveRatio <= 0) return
@@ -365,10 +366,18 @@ function EspressoTab() {
       <section className="rounded-xl border border-stone-200 bg-espresso-800 p-3 text-white shadow">
         <div className="flex">
           <div className="flex-1 min-w-0 space-y-2 text-base pr-3">
-            <div className="flex justify-between"><span className="text-espresso-200">{t('ratioLabel')}</span><span className="tabular-nums">{espressoRatioName(effectiveRatio)} 1:{effectiveRatio}</span></div>
+            {(() => {
+              const preset = ESPRESSO_RATIO_PRESETS.find(p => p.ratio === effectiveRatio)
+              return (
+                <div className="flex justify-between">
+                  <span className="text-espresso-200">{t('ratioLabel')}</span>
+                  <span className="tabular-nums">{preset ? `${preset.name} (${preset.desc})` : `1:${effectiveRatio}`}</span>
+                </div>
+              )
+            })()}
             {currentDrink?.milkParts != null && (
               <div className="flex justify-between">
-                <span className="text-espresso-200">{t('milkRatioLabel', currentDrink.extraLabel)}</span>
+                <span className="text-espresso-200">{t('milkRatioLabel')}</span>
                 <span className="tabular-nums">
                   1 : {currentDrink.milkParts}
                   <span className="ml-1 text-espresso-300 text-sm">
@@ -385,7 +394,7 @@ function EspressoTab() {
           </div>
         </div>
         <div className="mt-3 border-t border-espresso-600 pt-2 text-center text-sm text-espresso-200">
-          {t('summaryGrind')} {grindSize} · {t('summaryDose')} {dose}g ({espressoRatioName(effectiveRatio)} 1:{effectiveRatio}) · {brewTime}s · {t('summaryTamp')} {tampPressure}kg
+          {t('summaryGrind')} {grindSize} · {t('summaryDose')} {dose}g ({ESPRESSO_RATIO_PRESETS.find(p => p.ratio === effectiveRatio)?.desc ?? ''}) · {brewTime}s · {t('summaryTamp')} {tampPressure}kg
         </div>
       </section>
 
@@ -468,13 +477,13 @@ function EspressoConfigForm({ config, onSave, onCancel, onDelete }) {
   const { t } = useLang()
   const [name, setName] = useState(config?.name || '')
   const [yieldRatio, setYieldRatio] = useState(() => {
-    const r = config?.yieldRatio ?? 2
-    return ESPRESSO_RATIO_PRESETS.some(p => p.ratio === r) ? r : 2
+    const r = config?.yieldRatio ?? 3
+    return ESPRESSO_RATIO_PRESETS.some(p => p.ratio === r) ? r : 3
   })
   useEffect(() => {
     setName(config?.name || '')
-    const r = config?.yieldRatio ?? 2
-    setYieldRatio(ESPRESSO_RATIO_PRESETS.some(p => p.ratio === r) ? r : 2)
+    const r = config?.yieldRatio ?? 3
+    setYieldRatio(ESPRESSO_RATIO_PRESETS.some(p => p.ratio === r) ? r : 3)
   }, [config?.id])
   return (
     <div className="mt-1">
