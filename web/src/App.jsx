@@ -744,7 +744,14 @@ const DEFAULT_METHODS = [
   },
 ]
 
-const ROAST_LEVELS = ['極淺', '淺', '淺中', '中', '中深', '深']
+const ROAST_LEVELS = [
+  { zh: '極淺', en: 'Light+' },
+  { zh: '淺',   en: 'Light' },
+  { zh: '淺中', en: 'Medium Light' },
+  { zh: '中',   en: 'Medium' },
+  { zh: '中深', en: 'Medium Dark' },
+  { zh: '深',   en: 'Dark' },
+]
 
 /** 每步：間格時間(秒)、本步加水量(ml)；累計水量與折線由程式推算 */
 const DEFAULT_POUR_PLAN_STEPS = [
@@ -897,7 +904,7 @@ function clampAbsorption(v) {
 }
 
 function PourOverTab() {
-  const { t } = useLang()
+  const { t, lang } = useLang()
   // ── 持久化狀態 ────────────────────────────────────────────────────────────
   const [beans, setBeans]                 = useLocalStorageState('coffee.pour.beans', [])
   const [selectedBeanId, setSelectedBeanId] = useLocalStorageState('coffee.pour.selectedBeanId', '')
@@ -979,7 +986,7 @@ function PourOverTab() {
   const waterTemp     = currentMethod?.waterTemp    ?? 92
   const grindSize     = currentMethod?.grindSize    ?? 5
   const roastVal      = currentBean?.roast          ?? ''
-  const roastIsLegacy = Boolean(roastVal && !ROAST_LEVELS.includes(roastVal))
+  const roastIsLegacy = Boolean(roastVal && !ROAST_LEVELS.some(r => r.zh === roastVal))
 
   const planSteps = useMemo(
     () => migrateLegacyPlanSteps(currentMethod?.steps?.length ? currentMethod.steps : DEFAULT_POUR_PLAN_STEPS),
@@ -1231,7 +1238,7 @@ function PourOverTab() {
           <div className="text-xs text-pour-200">
             {[
               currentBean?.process && `${t('processLabel')} ${currentBean.process}`,
-              currentBean?.roast && `${t('roastLabel')} ${currentBean.roast}`,
+              currentBean?.roast && `${t('roastLabel')} ${ROAST_LEVELS.find(r => r.zh === currentBean.roast)?.[lang] ?? currentBean.roast}`,
             ].filter(Boolean).join(' · ')}
           </div>
         )}
@@ -1332,7 +1339,7 @@ function PourOverTab() {
                 className={INPUT_CELL}>
                 <option value="">— {t('roastLabel')} —</option>
                 {roastIsLegacy && <option value={roastVal}>{roastVal}（舊）</option>}
-                {ROAST_LEVELS.map((lvl) => <option key={lvl} value={lvl}>{lvl}</option>)}
+                {ROAST_LEVELS.map((lvl) => <option key={lvl.zh} value={lvl.zh}>{lang === 'en' ? lvl.en : lvl.zh}</option>)}
               </select>
             </div>
             <div className="mb-3">
